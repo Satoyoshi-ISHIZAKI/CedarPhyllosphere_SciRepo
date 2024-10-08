@@ -1,0 +1,9 @@
+# Ignore RStudio files
+.Rhistory
+.RData
+.Rproj.user/
+.Ruserdata
+
+# Ignore renv folders (if using renv for package management)
+renv/library/
+renv/staging/
