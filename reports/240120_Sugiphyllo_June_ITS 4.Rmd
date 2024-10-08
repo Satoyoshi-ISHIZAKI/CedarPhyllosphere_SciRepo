@@ -8,22 +8,24 @@ output: html_document
 #load packages
 
 ```{r}
-library(vegan)
+library(readxl)
 library(tidyverse)
 library(qiime2R)
 library(phyloseq)
-library(compositions)
+
+library(vegan)
+library(zCompositions)
+
 library(GGally)
-library(ggplot2)
 library(RColorBrewer)
 library(ggfortify)
+library(ggh4x)
+
 library(dendextend)
-library(reshape2)
 library(fantaxtic)
 library(ggnested)
-library(readxl)
+
 library(biomformat)
-library(ggh4x)
 ```
 
 # ASV richness function

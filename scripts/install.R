@@ -1,0 +1,34 @@
+#install packages needed (not via "install.packages")
+
+##Bioconductor
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+BiocManager::install(version = "3.19")
+
+##phyloseq
+if(!requireNamespace("BiocManager")){
+  install.packages("BiocManager")
+  }
+BiocManager::install("phyloseq")
+
+##qiime2R
+if (!requireNamespace("devtools", quietly = TRUE)){install.packages("devtools")}
+devtools::install_github("jbisanz/qiime2R")
+
+##fantaxtic
+if(!"devtools" %in% installed.packages()){
+  install.packages("devtools")
+}
+devtools::install_github("gmteunisse/fantaxtic")
+
+##ggnested
+if(!"devtools" %in% installed.packages()){
+  install.packages("devtools")
+}
+devtools::install_github("gmteunisse/ggnested")
+
+##biomformat
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+BiocManager::install("biomformat")
