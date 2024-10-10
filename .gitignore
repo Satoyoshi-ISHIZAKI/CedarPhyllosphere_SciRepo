@@ -11,4 +11,4 @@ renv/staging/
 #ignore R files on which private file path is written
 scripts/path.R
 reports/240120_Sugiphyllo_June_ITS.Rmd
-reports/240120_Sugiphyllo_June_16S.Rmd
+reports/231202_sugiphyllo_June_16S.Rmd
