@@ -1,0 +1,101 @@
+---
+title: "template"
+output: html_document
+date: "2024-10-10"
+---
+
+#load packages
+
+```{r}
+library(readxl)
+library(tidyverse)
+library(phyloseq)
+library(fantaxtic)
+library(ggnested)
+library(ggtext)
+```
+
+#path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+#create "path" file, and define "path" as your raw-data directory(character vector) in the file
+#"path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+#source codes
+
+#read processed data
+
+```{r import}
+#change "16S" to "ITS" to rarefy ITS data
+
+otus_data <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/otus_data_16S.csv"), row.names = 1)
+rownames(otus_data) <- formatC(as.numeric(rownames(otus_data)), width = 4, flag = "0") #add 0 to rownames
+
+tax_table <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/tax_table2_16S.csv"), row.names = 1)
+tax_table <- as.matrix(tax_table)
+
+metadata <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/metadata_2306.xlsx"), 
+                       sheet = "Sheet1")
+metadata <- column_to_rownames(metadata, var = "Sample_Name")
+
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/trees.Rdata"))
+```
+
+```{r}
+metadata$cloneID <- as.factor(metadata$cloneID)
+metadata$population <- as.factor(metadata$population)
+metadata$site <- as.factor(metadata$site)
+metadata$date <- as.factor(metadata$date)
+
+# add clone_ID to rownames (why needed?)
+rownames(otus_data) <- paste0(rownames(metadata), "_", metadata$population)
+rownames(metadata) <- paste0(rownames(metadata), "_", metadata$population)
+```
+
+#barplot
+
+```{r barplot}
+ps_0 <- phyloseq(otu_table(otus_data[51:108, ], taxa_are_rows = F), 
+                 tax_table(tax_table), 
+                 phy_tree(tree2$data), 
+                 sample_data(metadata[51:108, ])) #change row indices to choose samples included in barplots
+```
+
+```{r, cache=TRUE, dependson="barplot"}
+# top_taxa(上位10Genus)選別
+top_asv <- nested_top_taxa(ps_obj = ps_0, 
+                    top_tax_level = "Phylum", 
+                    n_top_taxa = 3, 
+                    nested_tax_level = "Genus", 
+                    n_nested_taxa = 2, 
+                    grouping = "site")
+```
+
+```{r}
+p_comp <- plot_nested_bar(ps_obj = top_asv$ps_obj, 
+                      top_level = "Phylum", 
+                      nested_level = "Genus")
+p_comp <- p_comp + theme_classic()
+p_comp <- p_comp + facet_wrap(~ site, 
+                      scales = "free_x")
+p_comp <- p_comp + labs(y = "Relative Abundance")
+p_comp <- p_comp + theme(axis.title.x = element_blank(), 
+                         #axis.text.x = element_blank(), 
+                         axis.text.x = element_text(size = 2.3, angle = 45, vjust = 1.5,hjust = 1.2), 
+                         axis.ticks.x = element_blank(), 
+                         axis.title.y = element_text(size = 7), 
+                         strip.background.x = element_rect(color = "black", 
+                                                           fill = "white"), 
+                         strip.text.x = element_text(color = "black", 
+                                                     size = 8), 
+                         legend.title = element_text(size = 7), 
+                         legend.text = element_markdown(size = 5.5), 
+                         legend.key.size = unit(1, "mm"))
+show(p_comp)
+ggsave(plot = p_comp, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_16S_kawatabi.png"), 
+       dpi = 400, width = 88, height = 45, units = "mm")
+#(A4, margin = c(25.4, 25.4), units = "mm")
+```
