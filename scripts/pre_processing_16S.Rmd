@@ -1,0 +1,125 @@
+---
+title: "pre_processing"
+output: html_document
+date: "2024-10-08"
+---
+
+```{r}
+library(readxl)
+library(tidyverse)
+library(qiime2R)
+library(phyloseq)
+```
+
+#path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+#create "path" file, and define "path" as your raw-data directory(character vector) in the file
+#"path" is raw-data directory, and "path_out" is output file directory
+source("../scripts/path.R")
+```
+
+#source codes
+
+```{r}
+source("../R/add_NA.R")
+```
+
+#import raw-data
+
+```{r import}
+otus <- read_qza(paste0(path, 
+                        "/Analysis/NoContam/table-no-contam_16S_2.qza"))
+taxonomy <- read_qza(paste0(path, 
+                            "/Analysis/taxa/classification_16S.qza"))
+tree <- read_qza(paste0(path, "/Analysis/phylogeny/seqs_nocontam_16S_aligned_masked_tree_rooted.qza"))
+tree_rarefied <- read_qza(paste0(path, "/Analysis/phylogeny/seqs_rarefied_16S_aligned_masked_tree_rooted.qza"))
+```
+
+#otu_table
+
+```{r otus-data}
+otus_data <- otu_table(t(otus$data), taxa_are_rows = FALSE)
+```
+
+#tax_table
+
+```{r tax-table, cache=TRUE, dependson="import"}
+taxonomy_list <- insert_NA(taxonomy)
+
+# tax_table
+tax_table <- do.call(rbind, taxonomy_list)
+colnames(tax_table) <- c("Kingdom", 
+                        "Phylum", 
+                        "Class", 
+                        "Order", 
+                        "Family", 
+                        "Genus", 
+                        "Species")
+rownames(tax_table) <- taxonomy$data$Feature.ID
+
+#Assign ASV numbers to each ASV
+ASV_name <- paste0(rep("ASV", nrow(tax_table)), 
+                   seq(1, nrow(tax_table)))
+tax_table <- cbind(tax_table, ASV_name)
+```
+
+#tax_table2, rownames of which are ASV numbers
+
+```{r tax-table2, cache=TRUE, dependson="tax-table"}
+tax_table2 <- tax_table
+tax_table2[, 1] <- str_sub(tax_table[, 1], 4)
+tax_table2[tax_table2[, 1] == "ssigned", 1] <- tax_table[tax_table[, 1] == "Unassigned", 1]
+tax_table2[, 2:7] <- str_sub(tax_table2[, 2:7], 5)
+
+rownames(tax_table2) <- tax_table2[, 8]
+tax_table2 <- tax_table2[, 1:7]
+```
+
+
+#otus_data2, colnames of which are ASV numbers
+
+```{r otus-data2, cache=TRUE, dependson="tax-table"}
+feature_row <- sapply(as.list(colnames(otus_data)), 
+                      grep, 
+                      rownames(tax_table))
+
+otus_data2 <- otus_data
+colnames(otus_data2) <- tax_table[feature_row, 8]
+```
+
+##tree_change_hash_to_ASV
+
+```{r tree, cache=TRUE, dependson="import", dependson="tax-table"}
+tree2 <- tree
+feature_tree <- sapply(tree2$data$tip.label, 
+                       grep, 
+                       rownames(tax_table))
+tree2$data$tip.label <- tax_table[feature_tree, 8]
+```
+
+```{r, cache=TRUE, dependson="import", dependson="tax-table"}
+tree_rarefied2 <- tree_rarefied
+#tip_labels of the phylogenetic tree are also hashes
+
+#replace hashes to ASV names
+tree_rarefied2$data$tip.label <- tax_table[
+  sapply(tree_rarefied2$data$tip.label, 
+         grep, 
+         rownames(tax_table)
+         ), 8]
+```
+
+#output
+
+```{r output, cache=TRUE, dependson=tax-table2}
+write.csv(tax_table, 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/tax_table_16S.csv"))
+write.csv(tax_table2, 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/tax_table2_16S.csv"))
+write.csv(otus_data2, 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/otus_data_16S.csv"))
+save(list = c("tree2", "tree_rarefied2"), 
+     file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/trees.Rdata"))
+```
+
