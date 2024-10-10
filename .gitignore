@@ -7,3 +7,7 @@
 # Ignore renv folders (if using renv for package management)
 renv/library/
 renv/staging/
+
+#ignore R files on which private file path is written
+scripts/path.R
+reports/240120_Sugiphyllo_June_ITS.Rmd

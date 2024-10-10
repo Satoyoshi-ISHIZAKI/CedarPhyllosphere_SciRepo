@@ -5,5 +5,96 @@ date: "2024-10-08"
 ---
 
 ```{r}
+library(readxl)
+library(tidyverse)
+library(qiime2R)
+library(phyloseq)
+```
 
+#path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+path <- "G:/マイドライブ/ishizaki/231202_Sugi_phyllosphere_June"
+```
+
+#import raw-data
+
+```{r import}
+otus <- read_qza(paste0(path, 
+                        "/Analysis/NoContam/table-no-contam_ITS.qza"))
+taxonomy <- read_qza(paste0(path, 
+                            "/Analysis/taxa/classification_ITS_single_all.qza"))
+tree <- read_qza(paste0(path, 
+                        "/Analysis/phylogeny/seqs_nocontam_ITS_aligned_masked_tree_rooted.qza"))
+tree_rarefied <- read_qza(paste0(path, 
+                                 "/Analysis/phylogeny/seqs_rarefied_ITS_aligned_masked_tree_rooted.qza"))
+```
+
+#otu_table
+
+```{r otus-data}
+otus_data <- otu_table(t(otus$data), taxa_are_rows = FALSE)
+```
+
+#tax_table
+
+```{r tax-table, cache=TRUE, dependson="import"}
+taxonomy_list <- insert_NA(taxonomy)
+
+# tax_table
+tax_table <- do.call(rbind, taxonomy_list)
+colnames(tax_table) <- c("Kingdom", 
+                        "Phylum", 
+                        "Class", 
+                        "Order", 
+                        "Family", 
+                        "Genus", 
+                        "Species", 
+                        "SpeciesHypothesis")
+rownames(tax_table) <- taxonomy$data$Feature.ID
+
+# ASV_nameとfearture idの対応付け
+ASV_name <- paste0(rep("ASV", nrow(tax_table)), 
+                   seq(1, nrow(tax_table)))
+tax_table <- cbind(tax_table, ASV_name)
+```
+
+```{r tax-table2, cache=TRUE, dependson="tax-table"}
+tax_table2 <- tax_table
+tax_table2[, 1] <- str_sub(tax_table[, 1], 4)
+tax_table2[tax_table2[, 1] == "ssigned", 1] <- tax_table[tax_table[, 1] == "Unassigned", 1]
+tax_table2[, 2:8] <- str_sub(tax_table2[, 2:8], 4)
+
+rownames(tax_table2) <- tax_table2[, 9]
+tax_table2 <- tax_table2[, 1:8]
+```
+
+
+# feature numberからASVnameへ
+
+```{r otus-data2, cache=TRUE, dependson="tax-table"}
+feature_row <- sapply(as.list(colnames(otus_data)), 
+                      grep, 
+                      rownames(tax_table))
+
+otus_data2 <- otus_data
+colnames(otus_data2) <- tax_table[feature_row, 9]
+```
+
+##tree_feature_name_to_ASV
+
+```{r tree, cache=TRUE, dependson="import", dependson="tax-table"}
+tree_ITS2 <- tree_ITS
+feature_tree <- sapply(tree_ITS2$data$tip.label, 
+                       grep, 
+                       rownames(tax_table))
+tree_ITS2$data$tip.label <- tax_table[feature_tree, 9]
+```
+
+```{r, cache=TRUE, dependson="import", dependson="tax-table"}
+tree_rarefied2 <- tree_rarefied
+#tip_labels of the phylogenetic tree are also hashes
+
+#replace hashes to ASV names
+tree_rarefied2$data$tip.label <- tax_table[sapply(tree_rarefied2$data$tip.label, grep, rownames(tax_table)), 9]
 ```
