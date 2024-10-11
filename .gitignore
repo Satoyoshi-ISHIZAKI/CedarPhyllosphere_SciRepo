@@ -10,5 +10,5 @@ renv/staging/
 
 #ignore R files on which private file path is written
 scripts/path.R
-reports/*
+reports/
 

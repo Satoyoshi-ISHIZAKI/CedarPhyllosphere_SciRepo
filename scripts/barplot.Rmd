@@ -1,5 +1,5 @@
 ---
-title: "template"
+title: "barplot"
 output: html_document
 date: "2024-10-10"
 ---

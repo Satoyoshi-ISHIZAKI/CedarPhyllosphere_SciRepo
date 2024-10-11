@@ -1,5 +1,5 @@
 ---
-title: "template"
+title: "NMDS"
 output: html_document
 date: "2024-10-10"
 ---
@@ -68,6 +68,7 @@ dist_UF_wei <- UniFrac(ps, weighted = TRUE)
 #NMDS_bray
 
 ```{r bray, cache=TRUE, dependson="dist"}
+#perform NMDS, starting from such a seed as to generate the lowest stress value 
 nmds_bray <- bestNMDS(dist_bray)
 ```
 

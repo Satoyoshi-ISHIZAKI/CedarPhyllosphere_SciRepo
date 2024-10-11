@@ -1,0 +1,132 @@
+---
+title: "statistics_comparison"
+output: html_document
+date: "2024-10-10"
+---
+
+#load packages
+
+```{r}
+library(readxl)
+library(phyloseq)
+library(tidyverse)
+library(vegan)
+```
+
+#path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+#create "path" file, and define "path" as your raw-data directory(character vector) in the file
+#"path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+#source codes
+
+```{r}
+#source()
+```
+
+#read processed data
+
+```{r}
+#change "16S" to "ITS" to rarefy ITS data
+df_rarefied <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/df_rarefied_16S.csv"), row.names = 1)
+rownames(df_rarefied) <- formatC(as.numeric(rownames(df_rarefied)), width = 4, flag = "0") 
+#add 0 to the head of rownames
+
+tax_table <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/tax_table2_16S.csv"), row.names = 1)
+tax_table <- as.matrix(tax_table)
+
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/trees.Rdata"))
+
+metadata <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/metadata_2306.xlsx"), 
+                       sheet = "Sheet1")
+metadata <- column_to_rownames(metadata, var = "Sample_Name")
+metadata$cloneID <- as.factor(metadata$cloneID)
+metadata$population <- as.factor(metadata$population)
+metadata$site <- as.factor(metadata$site)
+metadata$date <- as.factor(metadata$date)
+```
+
+#phyloseq_object
+
+```{r}
+ps <- phyloseq(otu_table(df_rarefied, taxa_are_rows = FALSE), 
+               tax_table(tax_table), 
+               phy_tree(tree_rarefied2$data), 
+               sample_data(metadata))
+```
+
+#dist
+
+```{r dist}
+dist_bray <- vegdist(df_rarefied, method = "bray")
+dist_UF <- UniFrac(ps, weighted = TRUE)
+```
+
+# PERMANOVA
+##bray
+
+```{r}
+set.seed(234)
+model_bray <- adonis2(dist_bray ~ site + population, 
+                 data = metadata, 
+                 perm = 999, 
+                 method = "bray", 
+                 by = "terms")
+model_bray
+```
+
+```{r}
+set.seed(345)
+model_bray <- adonis2(dist_bray ~ site * population, 
+                      data = metadata, 
+                      perm = 999, 
+                      by = "terms")
+model_bray
+```
+
+```{r}
+set.seed(456)
+adonis2(vegdist(df_rarefied[metadata$site == "Tsukuba", ]) ~ population, 
+        data = metadata[metadata$site == "Tsukuba", ], 
+        perm = 999, 
+        by = "terms")
+
+set.seed(567)
+adonis2(vegdist(df_rarefied[metadata$site == "Kawatabi", ]) ~ population, 
+        data = metadata[metadata$site == "Kawatabi", ], 
+        perm = 999, 
+        by = "terms")
+```
+
+##UniFrac
+
+```{r}
+set.seed(678)
+model_UF <- adonis2(dist_UF ~ site * population, 
+                    data = metadata, 
+                    perm = 999, 
+                    by = "terms")
+
+model_UF
+```
+
+#PERMDISP
+
+```{r}
+#PERMANOVA confounds location effects and dispersion effects
+#refference: Warton, D. I., Wright, S. T., & Wang, Y. (2012). Distance‐based multivariate analyses confound location and dispersion effects. Methods in Ecology and Evolution, 3(1), 89-101.
+
+#Thus, the differences of dispersion among groups should be tested
+set.seed(789)
+disp_bray <- betadisper(dist_bray, 
+                        metadata$site, 
+                        type = "centroid")
+disp_bray
+permutest(disp_bray, permutations = 999)
+plot(disp_bray)
+```
+
