@@ -31,17 +31,17 @@ source("../scripts/path.R")
 ```{r import}
 #change "16S" to "ITS" to rarefy ITS data
 
-otus_data <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/otus_data_16S.csv"), row.names = 1)
+otus_data <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/otus_data_ITS.csv"), row.names = 1)
 rownames(otus_data) <- formatC(as.numeric(rownames(otus_data)), width = 4, flag = "0") #add 0 to rownames
 
-tax_table <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/tax_table2_16S.csv"), row.names = 1)
+tax_table <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/tax_table2_ITS.csv"), row.names = 1)
 tax_table <- as.matrix(tax_table)
 
-metadata <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/metadata_2306.xlsx"), 
+metadata <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/metadata_2306.xlsx"), 
                        sheet = "Sheet1")
 metadata <- column_to_rownames(metadata, var = "Sample_Name")
 
-load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/trees.Rdata"))
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/trees.Rdata"))
 ```
 
 ```{r}
@@ -65,9 +65,9 @@ ps_0 <- phyloseq(otu_table(otus_data[51:108, ], taxa_are_rows = F),
 ```
 
 ```{r, cache=TRUE, dependson="barplot"}
-# top_taxa(上位10Genus)選別
+#select highly abundant taxa
 top_asv <- nested_top_taxa(ps_obj = ps_0, 
-                    top_tax_level = "Phylum", 
+                    top_tax_level = "Class", 
                     n_top_taxa = 3, 
                     nested_tax_level = "Genus", 
                     n_nested_taxa = 2, 
@@ -76,7 +76,7 @@ top_asv <- nested_top_taxa(ps_obj = ps_0,
 
 ```{r}
 p_comp <- plot_nested_bar(ps_obj = top_asv$ps_obj, 
-                      top_level = "Phylum", 
+                      top_level = "Class", 
                       nested_level = "Genus")
 p_comp <- p_comp + theme_classic()
 p_comp <- p_comp + facet_wrap(~ site, 
@@ -84,18 +84,19 @@ p_comp <- p_comp + facet_wrap(~ site,
 p_comp <- p_comp + labs(y = "Relative Abundance")
 p_comp <- p_comp + theme(axis.title.x = element_blank(), 
                          #axis.text.x = element_blank(), 
-                         axis.text.x = element_text(size = 2.3, angle = 45, vjust = 1.5,hjust = 1.2), 
+                         axis.text.x = element_text(size = 2, angle = 45, vjust = 1.5,hjust = 1.2), 
                          axis.ticks.x = element_blank(), 
-                         axis.title.y = element_text(size = 7), 
+                         axis.title.y = element_text(size = 6), 
+                         axis.text.y = element_text(size = 4), 
                          strip.background.x = element_rect(color = "black", 
                                                            fill = "white"), 
                          strip.text.x = element_text(color = "black", 
-                                                     size = 8), 
-                         legend.title = element_text(size = 7), 
-                         legend.text = element_markdown(size = 5.5), 
+                                                     size = 6), 
+                         legend.title = element_text(size = 6), 
+                         legend.text = element_markdown(size = 5), 
                          legend.key.size = unit(1, "mm"))
 show(p_comp)
-ggsave(plot = p_comp, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_16S_kawatabi.png"), 
-       dpi = 400, width = 88, height = 45, units = "mm")
+ggsave(plot = p_comp, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/barplot_ITS_kawatabi.png"), 
+       dpi = 400, width = 75, height = 40, units = "mm")
 #(A4, margin = c(25.4, 25.4), units = "mm")
 ```
