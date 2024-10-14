@@ -86,6 +86,8 @@ model_bray <- adonis2(dist_bray ~ site * population,
                       perm = 999, 
                       by = "terms")
 model_bray
+
+#write.csv(model_bray, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/PERMANOVA_bray.csv"))
 ```
 
 ```{r}
@@ -112,21 +114,44 @@ model_UF <- adonis2(dist_UF ~ site * population,
                     by = "terms")
 
 model_UF
+
+#write.csv(model_UF, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/PERMANOVA_weightedUF.csv"))
 ```
 
 #PERMDISP
+##bray
 
 ```{r}
 #PERMANOVA confounds location effects and dispersion effects
 #refference: Warton, D. I., Wright, S. T., & Wang, Y. (2012). Distance‐based multivariate analyses confound location and dispersion effects. Methods in Ecology and Evolution, 3(1), 89-101.
 
 #Thus, the differences of dispersion among groups should be tested
-set.seed(789)
 disp_bray <- betadisper(dist_bray, 
                         metadata$site, 
                         type = "centroid")
 disp_bray
-permutest(disp_bray, permutations = 999)
+
+set.seed(789)
+disptest_bray <- permutest(disp_bray, permutations = 999)
+show(disptest_bray)
 plot(disp_bray)
+
+#write.csv(disptest_bray$tab, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/PERMDISP_bray.csv"))
+```
+
+##UniFrac
+
+```{r}
+disp_UniFrac <- betadisper(dist_UF, 
+                        metadata$site, 
+                        type = "centroid")
+disp_UniFrac
+
+set.seed(890)
+disptest_UniFrac <- permutest(disp_UniFrac, permutations = 999)
+show(disptest_UniFrac)
+plot(disp_UniFrac)
+
+#write.csv(disptest_UniFrac$tab, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/PERMDISP_weightedUF.csv"))
 ```
 
