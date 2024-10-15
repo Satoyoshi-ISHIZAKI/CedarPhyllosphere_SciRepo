@@ -1,0 +1,128 @@
+---
+title: "template"
+output: html_document
+date: "2024-10-10"
+---
+
+#load packages
+
+```{r}
+library(readxl)
+library(phyloseq)
+library(tidyverse)
+library(vegan)
+library(RColorBrewer)
+library(scales)
+```
+
+#path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+#create "path" file, and define "path" as your raw-data directory(character vector) in the file
+#"path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+#source codes
+
+```{r}
+#source("")
+```
+
+#read processed data
+
+```{r}
+#change "16S" to "ITS" to rarefy ITS data
+df_rarefied <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/df_rarefied_ITS.csv"), row.names = 1)
+rownames(df_rarefied) <- formatC(as.numeric(rownames(df_rarefied)), width = 4, flag = "0") 
+#add 0 to the head of rownames
+
+metadata <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/metadata_2306.xlsx"), 
+                       sheet = "Sheet1")
+metadata <- column_to_rownames(metadata, var = "Sample_Name")
+metadata$cloneID <- as.factor(metadata$cloneID)
+metadata$population <- as.factor(metadata$population)
+metadata$site <- as.factor(metadata$site)
+metadata$date <- as.factor(metadata$date)
+```
+
+#BVOC_import
+
+```{r import_BVOC}
+#AZ_040_1 is excluded since it was detected as an outlier by outlier analysis (using bray-curtis dissimilarity)
+BVOC_2306 <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/BVOC_summary_240122.xlsx"), 
+                       sheet = "2306_KAWATABI")
+BVOC_2306 <- column_to_rownames(BVOC_2306, var = "samplename")
+```
+
+## ASV table and metadata to be analyzed with BVOCs emission data
+
+```{r}
+metadata_kawatabi <- metadata[metadata$site == "Kawatabi", ]
+metadata_BVOC <- metadata_kawatabi[charmatch(rownames(BVOC_2306), 
+                                             metadata_kawatabi$samplename), ]
+df_rarefied_BVOC <- df_rarefied[rownames(metadata_BVOC), ]
+
+write.csv(df_rarefied_BVOC, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/df_rarefied_ITS_BVOC.csv"))
+write.csv(metadata_BVOC, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/metadata_ITS_BVOC.csv"))
+```
+
+#emission_barplot
+
+```{r}
+#gather the emission data before plotting
+BVOC_2306_ga <- rownames_to_column(BVOC_2306, var = "ID")
+BVOC_2306_ga <- cbind(population = metadata_BVOC$population, BVOC_2306_ga)
+BVOC_2306_ga <- gather(BVOC_2306_ga, "BVOC", "emission", c(-ID, -population))
+
+#assign colors to each terpene
+col_BVOC <- c(colorRampPalette(c("green2", "grey30", "yellow2"))(12), 
+              "purple3", "blue3")
+
+#draw barplot
+p_BVOC <- ggplot(data = BVOC_2306_ga, mapping = aes(x = ID, 
+                                                    y = emission, 
+                                                    fill = factor(BVOC, 
+                                                                  levels = colnames(BVOC_2306))))
+p_BVOC <- p_BVOC + geom_bar(stat = "identity")
+p_BVOC <- p_BVOC + theme_classic()
+p_BVOC <- p_BVOC + scale_fill_manual(values = col_BVOC)
+p_BVOC <- p_BVOC + scale_y_continuous(labels = label_comma())
+p_BVOC <- p_BVOC + facet_wrap(~ population, scales = "free_x", 
+                              labeller = as_labeller(c("AJ" = "Ajigazawa", 
+                                                       "AZ" = "Azouji", 
+                                                       "YK" = "Yakushima")))
+p_BVOC <- p_BVOC + labs(fill = "Terpenes")
+p_BVOC <- p_BVOC + 
+  ylab(expression(paste("Basal Emission Rate (ng ", {gdw^-1}, " ", {h^-1}, ")")))
+p_BVOC <- p_BVOC + theme(axis.title.x = element_blank(), 
+                         axis.text.x = element_text(size = 3, 
+                                                    angle = 90, 
+                                                    vjust = 0.3), 
+                         axis.ticks.x = element_blank(), 
+                         
+                         axis.text.y = element_text(size = 4), 
+                         axis.title.y = element_text(size = 5), 
+                         
+                         strip.text.x = element_text(size = 5), 
+                         axis.line = element_line(linewidth = 0.4), 
+                         
+                         legend.title = element_text(size = 5), 
+                         legend.text = element_text(size = 3.5), 
+                         legend.key.size = unit(1.5, "mm"))
+show(p_BVOC)
+
+ggsave(plot = p_BVOC, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/barplot_BVOC.png"), 
+       dpi = 400, width = 75, height = 40, units = "mm")
+```
+
+#log_transform
+
+```{r}
+BVOC_2306_log <- BVOC_2306 + 0.01
+BVOC_2306_log <- log(BVOC_2306_log, base = 10)
+
+write.csv(BVOC_2306_log, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/BVOC_2306_log.csv"))
+```
+

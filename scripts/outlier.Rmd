@@ -59,6 +59,7 @@ ps <- phyloseq(otu_table(df_rarefied, taxa_are_rows = FALSE),
 ```
 
 #outlier_analysis
+##weighted UniFrac
 
 ```{r}
 #exclude samples with significantly different fungal community composition, based on weighted UniFrac distances
@@ -67,10 +68,35 @@ ps <- phyloseq(otu_table(df_rarefied, taxa_are_rows = FALSE),
 #https://doi.org/10.1186/s40168-018-0514-4
 dist_UF <- UniFrac(ps, weighted = TRUE)
 
-outlier_UFwei <- piecewise_kn_V1(dist_UF, test.ix = 1:nrow(df_rarefied), k = 5)
-outlier_UFwei <- metadata[which(outlier_UFwei$pvals < 0.05), ]
+test_UFwei <- piecewise_kn_V1(dist_UF, test.ix = 1:nrow(df_rarefied), k = 5)
+outlier_UFwei <- metadata[which(test_UFwei$pvals < 0.05), ]
+outlier_UFwei <- cbind(outlier_UFwei, 
+                       stats = test_UFwei$stats[which(test_UFwei$pvals < 0.05)], 
+                       pvals = test_UFwei$pvals[which(test_UFwei$pvals < 0.05)])
 show(outlier_UFwei)
+
+write.csv(outlier_UFwei, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/outlier_ITS_weightedUF.csv"))
 ```
+
+##bray
+
+```{r}
+#exclude samples with significantly different fungal community composition, based on weighted UniFrac distances
+#use CLOUD analysis
+#Montassier, E., Al-Ghalith, G.A., Hillmann, B. et al. CLOUD: a non-parametric detection test for microbiome outliers. Microbiome 6, 137 (2018). 
+#https://doi.org/10.1186/s40168-018-0514-4
+dist_bray <- vegdist(df_rarefied, method = "bray")
+
+test_bray <- piecewise_kn_V1(dist_bray, test.ix = 1:nrow(df_rarefied), k = 5)
+outlier_bray <- metadata[which(test_bray$pvals < 0.05), ]
+outlier_bray <- cbind(outlier_bray, 
+                       stats = test_bray$stats[which(test_bray$pvals < 0.05)], 
+                       pvals = test_bray$pvals[which(test_bray$pvals < 0.05)])
+show(outlier_bray)
+
+write.csv(outlier_bray, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/outlier_ITS_bray.csv"))
+```
+
 
 #NMDS_after_exclusion
 
