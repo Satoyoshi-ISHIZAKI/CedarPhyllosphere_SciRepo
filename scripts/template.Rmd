@@ -30,7 +30,7 @@ source("../R/bestNMDS.R")
 
 #read processed data
 
-```{r}
+```{r import}
 #change "16S" to "ITS" to rarefy ITS data
 df_rarefied <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/df_rarefied_16S.csv"), row.names = 1)
 rownames(df_rarefied) <- formatC(as.numeric(rownames(df_rarefied)), width = 4, flag = "0") 

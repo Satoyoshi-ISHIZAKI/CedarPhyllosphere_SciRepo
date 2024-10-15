@@ -1,0 +1,95 @@
+---
+title: "template"
+output: html_document
+date: "2024-10-10"
+---
+
+#load packages
+
+```{r}
+library(readxl)
+library(phyloseq)
+library(tidyverse)
+library(vegan)
+library(ggfortify)
+library(RColorBrewer)
+```
+
+#path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+#create "path" file, and define "path" as your raw-data directory(character vector) in the file
+#"path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+#source codes
+
+```{r}
+#source("../R/")
+```
+
+#read processed data
+
+```{r import}
+#change 16S to ITS to analyze ITS data
+metadata <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/metadata_16S_BVOC.csv"), row.names = 1)
+rownames(metadata) <- formatC(as.numeric(rownames(metadata)), width = 4, flag = "0")
+
+metadata$cloneID <- as.factor(metadata$cloneID)
+metadata$population <- as.factor(metadata$population)
+metadata$site <- as.factor(metadata$site)
+metadata$date <- as.factor(metadata$date)
+
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/BVOC_2306_16S_log.Rdata"))
+```
+
+#pca
+
+```{r}
+#remove kaurene from dataframe
+#sapply(c("kaurene"), grep, colnames(BVOC_log_ps))
+pca_BVOC_log_rm <- prcomp(BVOC_2306_log[, -c(14)], 
+                          scale. = TRUE)
+summary(pca_BVOC_log_rm)
+
+save(pca_BVOC_log_rm, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/pca_BVOC_2306_16S_log.Rdata"))
+```
+
+```{r}
+col_BVOC <- c(rep("green4", 12), "purple3", "blue3")
+col_pop <- colorRampPalette(c("blue3", "orange2"))(3)
+
+p_pca <- autoplot(pca_BVOC_log_rm, 
+                  data = cbind(BVOC_2306_log[, -c(14)], 
+                               population = metadata$population), 
+                  x = 1, y = 2,
+                  color = "population", 
+                  size = 1.3, 
+                  loadings = TRUE, 
+                  loadings.color = "grey", 
+                  loadings.label = TRUE, 
+                  loadings.label.color = col_BVOC[-c(14)], 
+                  loadings.label.size = 2.3) + 
+  coord_fixed(ratio = 1) + 
+  theme_classic() + 
+  labs(color = "Population") + 
+  scale_color_manual(values = col_pop, labels = c("Ajigazawa", "Azouji", "Yakushima")) +
+  theme(axis.title.x = element_text(size = 7), 
+        axis.text.x = element_text(size = 5), 
+        
+        axis.title.y = element_text(size = 7), 
+        axis.text.y = element_text(size = 5), 
+        
+        axis.line = element_line(linewidth = 0.4), 
+        legend.title = element_text(size = 8), 
+        legend.text = element_text(size = 7), 
+        legend.key.size = unit(2, "mm"))
+
+show(p_pca)
+
+ggsave(plot = p_pca, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/pca_BVOC_log.png"), 
+       dpi = 400, width = 75, height = 75, units = "mm")
+```
+
