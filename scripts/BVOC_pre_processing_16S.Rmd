@@ -1,5 +1,5 @@
 ---
-title: "template"
+title: "BVOC_pre-processing_16S"
 output: html_document
 date: "2024-10-10"
 ---
@@ -34,11 +34,11 @@ source("../R/add_NA.R")
 
 ```{r}
 #change "16S" to "ITS" to rarefy ITS data
-df_rarefied <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/df_rarefied_ITS.csv"), row.names = 1)
+df_rarefied <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/df_rarefied_16S.csv"), row.names = 1)
 rownames(df_rarefied) <- formatC(as.numeric(rownames(df_rarefied)), width = 4, flag = "0") 
 #add 0 to the head of rownames
 
-metadata <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/metadata_2306.xlsx"), 
+metadata <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/metadata_2306.xlsx"), 
                        sheet = "Sheet1")
 metadata <- column_to_rownames(metadata, var = "Sample_Name")
 metadata$cloneID <- as.factor(metadata$cloneID)
@@ -50,7 +50,7 @@ metadata$date <- as.factor(metadata$date)
 #BVOC_import
 
 ```{r import_BVOC}
-BVOC_2306 <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/BVOC_summary_240122.xlsx"), 
+BVOC_2306 <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/BVOC_summary_240122.xlsx"), 
                        sheet = "2306_KAWATABI")
 BVOC_2306 <- column_to_rownames(BVOC_2306, var = "samplename")
 ```
@@ -63,8 +63,8 @@ metadata_BVOC <- metadata_kawatabi[charmatch(rownames(BVOC_2306),
                                              metadata_kawatabi$samplename), ]
 df_rarefied_BVOC <- df_rarefied[rownames(metadata_BVOC), ]
 
-write.csv(df_rarefied_BVOC, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/df_rarefied_ITS_BVOC.csv"))
-write.csv(metadata_BVOC, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/metadata_ITS_BVOC.csv"))
+#write.csv(df_rarefied_BVOC, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/df_rarefied_16S_BVOC.csv"))
+#write.csv(metadata_BVOC, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/metadata_16S_BVOC.csv"))
 ```
 
 #emission_barplot
@@ -112,7 +112,7 @@ p_BVOC <- p_BVOC + theme(axis.title.x = element_blank(),
                          legend.key.size = unit(1.5, "mm"))
 show(p_BVOC)
 
-ggsave(plot = p_BVOC, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/barplot_BVOC.png"), 
+ggsave(plot = p_BVOC, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_BVOC.png"), 
        dpi = 400, width = 75, height = 40, units = "mm")
 ```
 
@@ -120,8 +120,9 @@ ggsave(plot = p_BVOC, filename = paste0(path_out, "/231202_Sugi_phyllosphere_Jun
 
 ```{r}
 BVOC_2306_log <- BVOC_2306 + 0.01
+BVOC_2306_total_log <- log(rowSums(BVOC_2306_log), base = 10)
 BVOC_2306_log <- log(BVOC_2306_log, base = 10)
 
-save(BVOC_2306_log, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/BVOC_2306_ITS_log.Rdata"))
+save(BVOC_2306_total_log, BVOC_2306_log, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/BVOC_2306_16S_log.Rdata"))
 ```
 

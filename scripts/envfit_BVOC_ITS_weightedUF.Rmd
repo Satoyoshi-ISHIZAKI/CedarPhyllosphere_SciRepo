@@ -1,0 +1,157 @@
+---
+title: "envfit_BVOC_weightedUF"
+output: html_document
+date: "2024-10-10"
+---
+
+#load packages
+
+```{r}
+library(readxl)
+library(phyloseq)
+library(tidyverse)
+library(vegan)
+library(RColorBrewer)
+```
+
+#path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+#create "path" file, and define "path" as your raw-data directory(character vector) in the file
+#"path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+#source codes
+
+```{r}
+source("../R/bestNMDS.R")
+```
+
+#read processed data
+
+```{r import}
+#rarefied-ASV table
+df_rarefied_full <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/df_rarefied_ITS_BVOCfull.csv"), row.names = 1)
+rownames(df_rarefied_full) <- formatC(as.numeric(rownames(df_rarefied_full)), width = 4, flag = "0") 
+#add 0 to the head of rownames
+
+#metadata
+metadata_full <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/metadata_ITS_BVOCfull.csv"), row.names = 1)
+rownames(metadata_full) <- formatC(as.numeric(rownames(metadata_full)), width = 4, flag = "0")
+
+metadata_full$cloneID <- as.factor(metadata_full$cloneID)
+metadata_full$population <- as.factor(metadata_full$population)
+metadata_full$site <- as.factor(metadata_full$site)
+metadata_full$date <- as.factor(metadata_full$date)
+
+#log-transformed BVOCs Emission
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/BVOC_2306_16S_log.Rdata"))
+
+#tax_table
+tax_table <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/tax_table2_ITS.csv"), row.names = 1)
+tax_table <- as.matrix(tax_table)
+
+#phylogenetic tree
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/trees.Rdata"))
+```
+
+##phyloseq object
+
+```{r}
+ps <- phyloseq(otu_table(df_rarefied_full, taxa_are_rows = FALSE), 
+               tax_table(tax_table), 
+               phy_tree(tree_rarefied2$data), 
+               sample_data(metadata_full))
+```
+
+#dist
+
+```{r dist}
+dist_UF_wei <- UniFrac(ps, weighted = TRUE)
+```
+
+#NMDS_weighted UF
+
+```{r weightedUF, cache=TRUE, dependson=dist}
+nmds_UFwei <- bestNMDS(dist_UF_wei)
+```
+
+```{r}
+stressplot(nmds_UFwei$nmds)
+nmds_UFwei$nmds$stress
+save(nmds_UFwei, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/NMDS_weightedUF_ITS_BVOC2306.Rdata"))
+```
+
+```{r}
+set.seed(564)
+adonis2(dist_UF_wei ~ population, 
+       data = metadata_full, 
+       perm = 999)
+
+set.seed(675)
+permutest(betadisper(dist_UF_wei, 
+                    metadata_full$population, 
+                    type = "centroid"))
+```
+
+##envfit_weightedUF
+
+```{r envfit}
+set.seed(786)
+fit_UFwei <- envfit(nmds_UFwei$nmds, 
+                   cbind(BVOC_2306_log[, -14], total = BVOC_2306_total_log))
+show(fit_UFwei)
+
+UFwei_score <- scores(fit_UFwei, display = "vectors")
+UFwei_score <- rownames_to_column(data.frame(UFwei_score))
+UFwei_score <- data.frame(UFwei_score, 
+                        p = fit_UFwei$vectors$pvals, 
+                        arr_col = rep("grey", nrow(UFwei_score)))
+UFwei_score$arr_col[UFwei_score$p < 0.05] <- "black"
+```
+
+```{r}
+df_nmds_UF <- data.frame(metadata_full, nmds_UFwei$nmds$points)
+col_pop <- colorRampPalette(c("blue3", "orange2"))(3)
+
+p_UFwei <- ggplot(df_nmds_UF, mapping = aes(x = MDS1, y = MDS2)) +
+  theme_classic() + 
+  geom_point(data = df_nmds_UF, mapping = aes(colour = population), size = 1) +
+  coord_fixed(ratio = 1) + ## need aspect ratio of 1!
+  scale_color_manual(values = col_pop, labels = c("Ajigazawa", "Azouji", "Yakushima")) +
+  labs(color = "Population") +
+  
+  geom_segment(data = UFwei_score,
+               aes(x = 0, xend = NMDS1/10, y = 0, yend = NMDS2/10),
+               arrow = arrow(length = unit(1, "mm")), 
+               color = UFwei_score$arr_col) +
+  geom_text(data = UFwei_score, 
+            aes(x = NMDS1/10, y = NMDS2/10, label = rowname),
+            size = 2) +
+  
+  geom_segment(data = data.frame(x = 0.025, y = -0.025),
+               aes(x = x, xend = (x + 0.01), y = y, yend = y),
+               arrow = arrow(length = unit(1, "mm")), 
+               color = "grey") +
+  annotate("text", x = 0.04, y = -0.025, size = 2, label = "P > 0.1") +
+  
+  annotate("text", 
+           x = 0.037, y = -0.03, size = 2, 
+           label = paste0("stress = ", 
+                          round(nmds_UFwei$nmds$stress, digits = 4))) +
+  
+  theme(axis.title.x = element_text(size = 7), 
+        axis.text.x = element_text(size = 5), 
+        
+        axis.title.y = element_text(size = 7), 
+        axis.text.y = element_text(size = 5), 
+        
+        axis.line = element_line(linewidth = 0.4), 
+        legend.title = element_text(size = 8), 
+        legend.text = element_text(size = 7), 
+        legend.key.size = unit(2, "mm"))
+show(p_UFwei)
+```
+

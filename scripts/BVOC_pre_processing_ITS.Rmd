@@ -1,5 +1,5 @@
 ---
-title: "template"
+title: "BVOC_pre-processing_ITS"
 output: html_document
 date: "2024-10-10"
 ---
@@ -33,7 +33,6 @@ source("../scripts/path.R")
 #read processed data
 
 ```{r}
-#change "16S" to "ITS" to rarefy ITS data
 df_rarefied <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/df_rarefied_ITS.csv"), row.names = 1)
 rownames(df_rarefied) <- formatC(as.numeric(rownames(df_rarefied)), width = 4, flag = "0") 
 #add 0 to the head of rownames
@@ -121,8 +120,31 @@ ggsave(plot = p_BVOC, filename = paste0(path_out, "/231202_Sugi_phyllosphere_Jun
 
 ```{r}
 BVOC_2306_log <- BVOC_2306 + 0.01
+BVOC_2306_total_log <- log(rowSums(BVOC_2306_log), base = 10)
 BVOC_2306_log <- log(BVOC_2306_log, base = 10)
 
+save(BVOC_2306_total_log, BVOC_2306_log, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/BVOC_2306_ITS_log.Rdata"))
 write.csv(BVOC_2306_log, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/BVOC_2306_log.csv"))
+```
+
+#BVOC_import_full
+
+```{r import-BVOC-full}
+#import full BVOC emission data
+BVOC_2306_full <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/BVOC_summary_240122.xlsx"), 
+                       sheet = "2306_KAWATABI")
+BVOC_2306_full <- column_to_rownames(BVOC_2306_full, var = "samplename")
+```
+
+#export full ASV and meta data to analyze with full BVOC emission data
+
+```{r}
+metadata_kawatabi_full <- metadata[metadata$site == "Kawatabi", ]
+metadata_BVOC_full <- metadata_kawatabi_full[charmatch(rownames(BVOC_2306_full), 
+                                             metadata_kawatabi_full$samplename), ]
+df_rarefied_BVOC_full <- df_rarefied[rownames(metadata_BVOC_full), ]
+
+write.csv(df_rarefied_BVOC_full, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/df_rarefied_ITS_BVOCfull.csv"))
+write.csv(metadata_BVOC_full, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/metadata_ITS_BVOCfull.csv"))
 ```
 

@@ -101,7 +101,7 @@ write.csv(outlier_bray, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_
 #NMDS_after_exclusion
 
 ```{r dist}
-#exclude outliers
+#exclude outliers based on the result of the outlier analysis (using weighted UF distance)
 df_rarefied_out <- df_rarefied[-charmatch(rownames(outlier_UFwei), rownames(df_rarefied)), ]
 metadata_out <- metadata[-charmatch(rownames(outlier_UFwei), rownames(df_rarefied)), ]
 
