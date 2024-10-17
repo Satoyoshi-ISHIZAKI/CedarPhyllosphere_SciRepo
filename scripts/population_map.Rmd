@@ -1,0 +1,61 @@
+---
+title: "population_map"
+output: html_document
+date: "2024-10-10"
+---
+
+#load packages
+
+```{r}
+library(readxl)
+library(tidyverse)
+library(ggrepel)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+```
+
+#path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+#create "path" file, and define "path" as your raw-data directory(character vector) in the file
+#"path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+#source codes
+
+```{r}
+#source("../R/bestNMDS.R")
+```
+
+#read processed data
+
+```{r import}
+location <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/location_Sugi_pop.xlsx"), sheet = "location")
+```
+
+```{r}
+# Download Japan map data at 1:50m scale
+japan <- ne_countries(scale = 50, country = "japan", returnclass = "sf")
+
+# Create the map
+map <- ggplot(data = japan) +
+  geom_sf() +
+  coord_sf(xlim = c(122, 154), ylim = c(20, 46), expand = FALSE) +
+  geom_point(data = location, aes(x = longitude, y = latitude), 
+             color = "black", size = 1) +
+  geom_text_repel(data = location, 
+                  aes(x = longitude, y = latitude, label = paste0(fullname, "(", population, ")")),
+                  size = 3, segment.color = "black",
+                  box.padding = 0.7, force = 2, max.overlaps = 15) +
+  xlab("Longitude") + ylab("Latitude") +
+  theme_classic()
+
+show(map)
+# Save the map (optional)
+ggsave(plot = map, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/population_map.png"), 
+       width = 150, height = 120, units = "mm", dpi = 350)
+```
+

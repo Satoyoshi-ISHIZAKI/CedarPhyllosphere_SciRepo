@@ -62,7 +62,6 @@ load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/BV
 
 ```{r dist}
 dist_bray <- vegdist(df_rarefied, method = "bray")
-dist_UF_wei <- UniFrac(ps, weighted = TRUE)
 ```
 
 #NMDS_bray
@@ -80,23 +79,31 @@ save(nmds_bray, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/proc
 
 ```{r}
 set.seed(231)
-adonis2(dist_bray ~ population, 
-       data = metadata, 
-       perm = 999)
+perma_bray <- adonis2(dist_bray ~ population, 
+                      data = metadata, 
+                      perm = 999)
+perma_bray
 
 set.seed(342)
-permutest(betadisper(dist_bray, 
-                    metadata$population, 
-                    type = "centroid"))
+disp_bray <- permutest(betadisper(dist_bray, 
+                                  metadata$population, 
+                                  type = "centroid"))
+disp_bray
+
+write.csv(perma_bray, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/PERMANOVA_bray_BVOC.csv"))
+write.csv(disp_bray$tab, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/PERMDISP_bray_BVOC.csv"))
 ```
 
 ##envfit
 
 ```{r envfit}
-set.seed(453)
+set.seed(45)
 fit_bray <- envfit(nmds_bray$nmds, 
                    cbind(BVOC_2306_log[, -14], total = BVOC_2306_total_log))
 show(fit_bray)
+df_fit_bray <-data.frame(fit_bray$vectors$arrows, 
+                         r = fit_bray$vectors$r, 
+                         p = fit_bray$vectors$pvals)
 
 bray_score <- scores(fit_bray, display = "vectors")
 bray_score <- rownames_to_column(data.frame(bray_score))
@@ -106,6 +113,9 @@ bray_score <- data.frame(bray_score,
 bray_score$arr_col[bray_score$p < 0.05] <- "black"
 
 bray_signif <- bray_score[bray_score$p < 0.1, ]
+
+save(fit_bray, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/envfit_bray_BVOC.Rdata"))
+write.csv(df_fit_bray, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/envfit_bray_BVOC.csv"))
 ```
 
 ```{r}
