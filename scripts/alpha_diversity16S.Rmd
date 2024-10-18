@@ -1,0 +1,154 @@
+---
+title: "alpha_diversity"
+output: html_document
+date: "2024-10-10"
+---
+
+#load packages
+
+```{r}
+library(readxl)
+library(phyloseq)
+library(tidyverse)
+library(vegan)
+library(glm2)
+library(gridExtra)
+library(gtable)
+```
+
+#path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+#create "path" file, and define "path" as your raw-data directory(character vector) in the file
+#"path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+#source codes
+
+```{r}
+source("../R/occurrence.R")
+```
+
+#read processed data
+
+```{r import}
+df_rarefied <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/df_rarefied_16S.csv"), row.names = 1)
+rownames(df_rarefied) <- formatC(as.numeric(rownames(df_rarefied)), width = 4, flag = "0") 
+#add 0 to the head of rownames
+
+tax_table <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/tax_table2_16S.csv"), row.names = 1)
+tax_table <- as.matrix(tax_table)
+
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/trees.Rdata"))
+
+metadata <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/metadata_2306.xlsx"), 
+                       sheet = "Sheet1")
+metadata <- column_to_rownames(metadata, var = "Sample_Name")
+metadata$cloneID <- as.factor(metadata$cloneID)
+metadata$population <- as.factor(metadata$population)
+metadata$site <- as.factor(metadata$site)
+metadata$date <- as.factor(metadata$date)
+
+location <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/location_Sugi_pop.xlsx"), sheet = "location")
+
+#merge sample-metadata and population metadata
+metadata_loc <- left_join(metadata, location, by = "population")
+rownames(metadata_loc) <- formatC(as.numeric(rownames(metadata_loc)), width = 4, flag = "0")
+```
+
+#alpha-diversity-indices
+
+```{r}
+metadata_loc$richness <- specnumber(df_rarefied)
+metadata_loc$shannon <- diversity(df_rarefied, index = "shannon")
+metadata_loc$simpson <- diversity(df_rarefied, index = "simpson")
+```
+
+##richness
+
+```{r}
+p_rich <- ggplot(data = metadata_loc, 
+                 mapping = aes(x = latitude, y = richness)) + 
+  geom_point(mapping = aes(color = site), size = 2) +
+  theme_classic() + 
+  xlim(c(30, 41)) + ylim(0, 300) +
+  scale_color_manual(values = c("orange3", "blue3")) +
+  labs(x = "Latitude", y = "Richness", color = "Site") +
+  theme(text = element_text(size = 10), 
+        legend.position = "inside", 
+        legend.title = element_text(size = 13), 
+        legend.text = element_text(size = 10))
+
+p_shannon <- ggplot(data = metadata_loc, 
+                    mapping = aes(x = latitude, y = shannon)) + 
+  geom_point(mapping = aes(color = site), size = 2) +
+  theme_classic() + 
+  xlim(c(30, 41)) + #ylim(0, 300) +
+  scale_color_manual(values = c("orange3", "blue3")) +
+  labs(x = "Latitude", 
+       y = expression(paste("Shannon's ",  italic("H'"))), 
+       color = "Site") +
+  theme(text = element_text(size = 10))
+
+p_simp <- ggplot(data = metadata_loc, 
+                 mapping = aes(x = latitude, y = simpson)) + 
+  geom_point(mapping = aes(color = site), size = 2) +
+  theme_classic() + 
+  xlim(c(30, 41)) + #ylim(0, 300) +
+  scale_color_manual(values = c("orange3", "blue3")) +
+  labs(x = "Latitude", 
+       y = expression(paste("Simpson's ",  italic("D"))), 
+       color = "Site") +
+  theme(text = element_text(size = 10))
+
+legend <- gtable_filter(ggplotGrob(p_rich), "guide-box")
+```
+
+```{r}
+p_div <- grid.arrange(p_rich + theme(legend.position = "none"), 
+                      p_shannon + theme(legend.position = "none"), 
+                      p_simp + theme(legend.position = "none"), 
+                      legend, 
+                      nrow = 2, ncol = 2)
+
+ggsave(p_div, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/alpha_16S.png"), 
+       dpi = 400, width = 150, height = 100, units = "mm")
+```
+
+#glm
+
+```{r}
+lm_rich <- glm2(richness ~ site * latitude, 
+                data = metadata_loc, 
+                family = Gamma(link = "inverse"))
+summary(lm_rich)
+
+write.csv(cbind(summary(lm_rich)$coefficients, 
+                AIC = summary(lm_rich)$aic), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/rich_glm_gamma.csv"))
+```
+
+```{r}
+lm_shan <- glm2(shannon ~ site * latitude, 
+                data = metadata_loc, 
+                family = gaussian)
+summary(lm_shan)
+
+write.csv(cbind(summary(lm_shan)$coefficients, 
+                AIC = summary(lm_shan)$aic), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/shannon_glm_gauss.csv"))
+```
+
+```{r}
+lm_simp <- glm2(simpson ~ site * latitude + I(latitude^2), 
+                data = metadata_loc, 
+                family = Gamma(link = "inverse"))
+summary(lm_simp)
+
+write.csv(cbind(summary(lm_simp)$coefficients, 
+                AIC = summary(lm_simp)$aic), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/simpson_glm_gamma.csv"))
+```
+

@@ -1,0 +1,275 @@
+---
+title: "NMDS"
+output: html_document
+date: "2024-10-10"
+---
+
+#load packages
+
+```{r}
+library(readxl)
+library(phyloseq)
+library(tidyverse)
+library(vegan)
+library(gridExtra)
+library(gtable)
+```
+
+#path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+#create "path" file, and define "path" as your raw-data directory(character vector) in the file
+#"path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+#source codes
+
+```{r}
+#source("../R/bestNMDS.R")
+```
+
+#read processed data
+##16S
+
+```{r import}
+#rarefied_ASV_table
+df_16S <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/df_rarefied_16S.csv"), row.names = 1)
+rownames(df_16S) <- formatC(as.numeric(rownames(df_16S)), width = 4, flag = "0") #add 0 to rownames
+
+#tax_table
+tax_16S <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/tax_table2_16S.csv"), row.names = 1)
+tax_16S <- as.matrix(tax_16S)
+
+#phylogenetic tree
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/trees.Rdata"))
+tree16S <- tree2
+tree16S_rarefied <- tree_rarefied2
+rm(list = c("tree2", "tree_rarefied2"))
+
+#metadata
+metadata <- read_excel(paste0(path_out, "/data/Sugi/metadata_2306.xlsx"), sheet = "Sheet1")
+metadata <- column_to_rownames(metadata, var = "Sample_Name")
+metadata$cloneID <- as.factor(metadata$cloneID)
+metadata$population <- as.factor(metadata$population)
+metadata$site <- as.factor(metadata$site)
+metadata$date <- as.factor(metadata$date)
+
+#load nmds output
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/NMDS_bray_16S.Rdata"))
+nmds_16S <- nmds_bray
+rm(nmds_bray)
+
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/NMDS_weightedUF_16S.Rdata"))
+nmds_16S_UF <- nmds_UF
+rm(nmds_UF)
+```
+
+##ITS
+
+```{r}
+#rarefied_ASV_table
+df_ITS <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/df_rarefied_ITS.csv"), row.names = 1)
+rownames(df_ITS) <- formatC(as.numeric(rownames(df_ITS)), width = 4, flag = "0") #add 0 to rownames
+
+#tax_table
+tax_ITS <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/tax_table2_ITS.csv"), row.names = 1)
+tax_ITS <- as.matrix(tax_ITS)
+
+#phylogenetic tree
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/trees.Rdata"))
+treeITS <- tree2
+treeITS_rarefied <- tree_rarefied2
+rm(list = c("tree2", "tree_rarefied2"))
+
+#load nmds output
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/NMDS_bray_ITS.Rdata"))
+nmds_ITS <- nmds_bray
+rm(nmds_bray)
+
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/NMDS_weightedUF_ITS.Rdata"))
+nmds_ITS_UF <- nmds_UF
+rm(nmds_UF)
+```
+
+#phyloseq object
+
+```{r phyloseq}
+ps_16S <- phyloseq(otu_table(df_16S, taxa_are_rows = FALSE), 
+               tax_table(tax_16S), 
+               phy_tree(tree16S_rarefied$data), 
+               sample_data(metadata))
+
+ps_ITS <- phyloseq(otu_table(df_ITS, taxa_are_rows = FALSE), 
+               tax_table(tax_ITS), 
+               phy_tree(treeITS_rarefied$data), 
+               sample_data(metadata))
+```
+
+#Bray
+##population_metadata
+
+```{r}
+#filter population data only
+popmeta <- metadata %>% 
+  select(population, fullname, latitude, longitude, altitude_min, altitude_max) %>% 
+  group_by(population) %>% 
+  summarize(population = first(population), 
+            fullname = first(fullname), 
+            latitude = first(latitude), 
+            longitude = first(longitude), 
+            alt_min = first(altitude_min), 
+            alt_max = first(altitude_max))
+
+#assign numbers to populations in ascending order with respect to latitude
+replace_rule <- 1:nrow(popmeta)
+names(replace_rule) <- as.character(popmeta$population[sapply(sort(popmeta$latitude), 
+                                                              grep, popmeta$latitude)])
+```
+
+##assign colors to samples in latitude-ascending order
+
+```{r}
+df_16S <- data.frame(metadata, nmds_16S$nmds$points)
+
+#assigned number for each sample
+pop_num <- as.character(df_16S$population)
+pop_num <- unlist(lapply(pop_num, function(x) replace_rule[x]))
+#set (site * population) levels
+fac_sipop <- as.factor(paste0(df_16S$site, LETTERS[pop_num]))
+#assign colors to each element
+col_sipop <- c(alpha("blue", seq(0.5, 1, length.out = length(replace_rule))), 
+               alpha("orange3", seq(0.5, 1, length.out = length(replace_rule)))
+               )
+```
+
+##16S
+
+```{r}
+p_16S <- ggplot(data = df_16S, 
+                 mapping = aes(x = MDS1, y = MDS2, color = fac_sipop))
+p_16S <- p_16S + theme_classic()
+p_16S <- p_16S + coord_fixed(1)
+p_16S <- p_16S + xlim(-2, 2) + ylim(-2, 2)
+p_16S <- p_16S + scale_color_manual(values = col_sipop)
+p_16S <- p_16S + geom_text(aes(label = names(pop_num)), 
+                             size = 6)
+p_16S <- p_16S + annotate("text", 
+                            x = 1.35, y = -2, size = 6, 
+                            label = paste0("stress = ", 
+                                           round(nmds_16S$nmds$stress, digits = 4)))
+p_16S <- p_16S + theme(legend.position = "none", 
+                         text = element_text(size = 15, family="sans"))
+p_16S
+ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/NMDS_bray_wide.png"), 
+       plot = p_16S, dpi = 400, width = 150, height = 150, units = "mm")
+```
+
+##ITS
+
+```{r}
+df_ITS <- data.frame(metadata, nmds_ITS$nmds$points)
+
+p_ITS <- ggplot(data = df_ITS, 
+                 mapping = aes(x = MDS1, y = MDS2, color = fac_sipop))
+p_ITS <- p_ITS + theme_classic()
+p_ITS <- p_ITS + coord_fixed(1)
+p_ITS <- p_ITS + xlim(-2.5, 2) + ylim(-2, 2.5)
+p_ITS <- p_ITS + scale_color_manual(values = col_sipop)
+p_ITS <- p_ITS + geom_text(aes(label = names(pop_num)), 
+                             size = 6)
+p_ITS <- p_ITS + annotate("text", 
+                            x = 1.35, y = -1.6, size = 6, 
+                            label = paste0("stress = ", 
+                                           round(nmds_ITS$nmds$stress, digits = 4)))
+p_ITS <- p_ITS + theme(legend.position = "none", 
+                         text = element_text(size = 15, family="sans"))
+p_ITS
+ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/NMDS_bray_wide.png"), 
+       plot = p_ITS, dpi = 400, width = 150, height = 150, units = "mm")
+```
+
+##legend
+
+```{r}
+p_legend <- ggplot(data = df_16S, 
+                 mapping = aes(x = MDS1, y = MDS2, color = site))
+p_legend <- p_legend + theme_classic()
+p_legend <- p_legend + coord_fixed(1)
+p_legend <- p_legend + scale_color_manual(values = c("blue", "orange3"))
+p_legend <- p_legend + geom_text(aes(label = names(pop_num)), size = 6)
+p_legend <- p_legend + labs(color = "Site")
+p_legend <- p_legend + theme(legend.position = "inside", 
+                       legend.title = element_text(size = 7.5), 
+                       legend.text = element_text(size = 5), 
+                       legend.key.size = unit(1, "mm"))
+p_legend
+legend <- gtable_filter(ggplotGrob(p_legend), "guide-box")
+
+ggsave(grid.arrange(legend), 
+       filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/NMDS_legend.png"), 
+       dpi = 400, width = 30, height = 30, units = "mm")
+```
+
+##layout two plots
+
+```{r}
+p_two_bray <- grid.arrange(p_16S, p_ITS, nrow = 1)
+ggsave(p_two_bray, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/NMDS_bray_both.png"), 
+       dpi = 400, width = 150, height = 75, units = "mm")
+```
+
+#UniFrac
+##16S
+```{r}
+df_16S_UF <- data.frame(metadata, nmds_16S_UF$nmds$points)
+
+p_16S_UF <- ggplot(data = df_16S_UF, 
+                 mapping = aes(x = MDS1, y = MDS2, color = fac_sipop))
+p_16S_UF <- p_16S_UF + theme_classic()
+p_16S_UF <- p_16S_UF + coord_fixed(1)
+p_16S_UF <- p_16S_UF + xlim(-0.15, 0.1) + ylim(-0.15, 0.1)
+p_16S_UF <- p_16S_UF + scale_color_manual(values = col_sipop)
+p_16S_UF <- p_16S_UF + geom_text(aes(label = names(pop_num)), size = 3)
+p_16S_UF <- p_16S_UF + annotate("text", 
+                                x = 0.05, y = -0.14, size = 3, 
+                                label = paste0("stress = ", 
+                                               round(nmds_16S_UF$nmds$stress, digits = 5)))
+p_16S_UF <- p_16S_UF + theme(legend.position = "none", 
+                         text = element_text(size = 7.5, family="sans"))
+p_16S_UF
+ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/NMDS_UF.png"), 
+       plot = p_16S_UF, dpi = 400, width = 75, height = 75, units = "mm")
+```
+
+##ITS
+
+```{r}
+df_ITS_UF <- data.frame(metadata, nmds_ITS_UF$nmds$points)
+
+p_ITS_UF <- ggplot(data = df_ITS_UF, 
+                 mapping = aes(x = MDS1, y = MDS2, color = fac_sipop)) + 
+  theme_classic() + 
+  coord_fixed(1) + 
+  xlim(-0.12, 0.04) + ylim(-0.08, 0.08) + 
+  scale_color_manual(values = col_sipop) + 
+  geom_text(aes(label = names(pop_num)), size = 2.5) + 
+  annotate("text", x = 0.005, y = -0.07, size = 3, 
+           label = paste0("stress = ", 
+                          round(nmds_ITS_UF$nmds$stress, digits = 5))) + 
+  theme(legend.position = "none", 
+        text = element_text(size = 7.5, family="sans"))
+p_ITS_UF
+ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/NMDS_UF.png"), 
+       plot = p_ITS_UF, dpi = 400, width = 75, height = 75, units = "mm")
+```
+
+#layout two plots(UF)
+
+```{r}
+p_two_UF <- grid.arrange(p_16S_UF, p_ITS_UF, nrow = 1)
+ggsave(p_two_UF, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/NMDS_UF_both.png"), 
+       dpi = 400, width = 150, height = 75, units = "mm")
+```
+
