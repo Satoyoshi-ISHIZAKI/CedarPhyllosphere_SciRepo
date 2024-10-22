@@ -1,0 +1,110 @@
+---
+title: "NMDS"
+output: html_document
+date: "2024-10-10"
+---
+
+#load packages
+
+```{r}
+library(readxl)
+library(phyloseq)
+library(tidyverse)
+library(vegan)
+```
+
+#path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+#create "path" file, and define "path" as your raw-data directory(character vector) in the file
+#"path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+#source codes
+
+```{r}
+source("../R/occurrence.R")
+```
+
+#read processed data
+
+```{r import}
+#rarefied_ASV_table
+df_16S <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/df_rarefied_16S.csv"), row.names = 1)
+rownames(df_16S) <- formatC(as.numeric(rownames(df_16S)), width = 4, flag = "0") #add 0 to rownames
+
+#tax_table
+tax_16S <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/tax_table2_16S.csv"), row.names = 1)
+tax_16S <- as.matrix(tax_16S)
+
+#phylogenetic tree
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/trees.Rdata"))
+tree16S <- tree2
+tree16S_rarefied <- tree_rarefied2
+rm(list = c("tree2", "tree_rarefied2"))
+
+#metadata
+metadata <- read_excel(paste0(path_out, "/data/Sugi/metadata_2306.xlsx"), sheet = "Sheet1")
+metadata <- column_to_rownames(metadata, var = "Sample_Name")
+metadata$cloneID <- as.factor(metadata$cloneID)
+metadata$population <- as.factor(metadata$population)
+metadata$site <- as.factor(metadata$site)
+metadata$date <- as.factor(metadata$date)
+
+#load nmds output
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/NMDS_bray_16S.Rdata"))
+nmds_16S <- nmds_bray
+rm(nmds_bray)
+
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/NMDS_weightedUF_16S.Rdata"))
+nmds_16S_UF <- nmds_UF
+rm(nmds_UF)
+```
+
+##ps_object
+
+```{r}
+ps_16S <- phyloseq(otu_table(df_16S, taxa_are_rows = FALSE), 
+               tax_table(tax_16S), 
+               phy_tree(tree16S_rarefied$data), 
+               sample_data(metadata))
+```
+
+#merge at Phylum level
+
+```{r}
+#show bacterial/fungal composition in the NMDS plots as arrows
+
+#merge ASVs at Class level
+ps_16S_Phylum <- tax_glom(ps_16S, taxrank = "Phylum")
+```
+
+```{r}
+plot(log(apply(otu_table(ps_16S_Phylum) / rowSums(otu_table(ps_16S_Phylum)), 2, mean)), 
+     apply(otu_table(ps_16S_Phylum), 2, occurrence), 
+     xlab = "log(Mean Relative Abundance)", 
+     ylab = "Occupancy")
+abline(h = 5, col = "red")
+
+#cut off Classes whose occurrence is less than 5
+table_16S_abun <- otu_table(ps_16S_Phylum)[, which(apply(otu_table(ps_16S_Phylum), 2, occurrence) > 4)]
+```
+
+#envfit_output
+
+```{r}
+set.seed(123)
+fit_ASV_16S <- envfit(nmds_16S$nmds, table_16S_abun)
+fit_ASV_16S$tax_table <- tax_table(ps_16S_Phylum)
+show(fit_ASV_16S)
+df_fit_ASV_16S <-data.frame(tax_table(ps_16S_Phylum)[rownames(fit_ASV_16S$vectors$arrows), "Phylum"], 
+                        fit_ASV_16S$vectors$arrows, 
+                        r = fit_ASV_16S$vectors$r, 
+                        p = fit_ASV_16S$vectors$pvals)
+
+save(fit_ASV_16S, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/envfit_bray_ASV.Rdata"))
+write.csv(df_fit_ASV_16S, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/envfit_bray_ASV.csv"))
+```
+

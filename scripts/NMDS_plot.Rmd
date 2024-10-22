@@ -27,7 +27,7 @@ source("../scripts/path.R")
 #source codes
 
 ```{r}
-#source("../R/bestNMDS.R")
+source("../R/occurrence.R")
 ```
 
 #read processed data
@@ -131,13 +131,11 @@ names(replace_rule) <- as.character(popmeta$population[sapply(sort(popmeta$latit
 ##assign colors to samples in latitude-ascending order
 
 ```{r}
-df_16S <- data.frame(metadata, nmds_16S$nmds$points)
-
 #assigned number for each sample
-pop_num <- as.character(df_16S$population)
+pop_num <- as.character(metadata$population)
 pop_num <- unlist(lapply(pop_num, function(x) replace_rule[x]))
 #set (site * population) levels
-fac_sipop <- as.factor(paste0(df_16S$site, LETTERS[pop_num]))
+fac_sipop <- as.factor(paste0(metadata$site, LETTERS[pop_num]))
 #assign colors to each element
 col_sipop <- c(alpha("blue", seq(0.5, 1, length.out = length(replace_rule))), 
                alpha("orange3", seq(0.5, 1, length.out = length(replace_rule)))
@@ -147,53 +145,158 @@ col_sipop <- c(alpha("blue", seq(0.5, 1, length.out = length(replace_rule))),
 ##16S
 
 ```{r}
-p_16S <- ggplot(data = df_16S, 
+df_nmds_16S <- data.frame(metadata, nmds_16S$nmds$points)
+
+p_16S <- ggplot(data = df_nmds_16S, 
                  mapping = aes(x = MDS1, y = MDS2, color = fac_sipop))
 p_16S <- p_16S + theme_classic()
 p_16S <- p_16S + coord_fixed(1)
 p_16S <- p_16S + xlim(-2, 2) + ylim(-2, 2)
 p_16S <- p_16S + scale_color_manual(values = col_sipop)
-p_16S <- p_16S + geom_text(aes(label = names(pop_num)), 
-                             size = 6)
+p_16S <- p_16S + geom_text(aes(label = names(pop_num))#, size = 6
+                           )
+
 p_16S <- p_16S + annotate("text", 
-                            x = 1.35, y = -2, size = 6, 
-                            label = paste0("stress = ", 
-                                           round(nmds_16S$nmds$stress, digits = 4)))
-p_16S <- p_16S + theme(legend.position = "none", 
-                         text = element_text(size = 15, family="sans"))
-p_16S
+                          x = 1.35, y = -2, #size = 6, 
+                          label = paste0("stress = ", 
+                                         round(nmds_16S$nmds$stress, digits = 4)))
+p_16S <- p_16S + theme(legend.position = "none")
+
 ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/NMDS_bray_wide.png"), 
-       plot = p_16S, dpi = 400, width = 150, height = 150, units = "mm")
+       plot = p_16S, 
+       dpi = 400, width = 150, height = 150, units = "mm")
+```
+
+###envfit(ASV)
+
+```{r}
+#import the result of vectorfitting of Phylum abundance on NMDS plot
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/envfit_bray_ASV.Rdata"))
+
+score_16S <- scores(fit_ASV_16S, display = "vectors")
+score_16S <- rownames_to_column(data.frame(score_16S))
+score_16S <- data.frame(score_16S, 
+                        class = fit_ASV_16S$tax_table[score_16S$rowname, "Phylum"], 
+                        p = fit_ASV_16S$vectors$pvals, 
+                        arr_col = rep("grey", nrow(score_16S)))
+
+signif_16S <- score_16S[score_16S$p < 0.05, ]
+```
+
+```{r}
+#NMDS plot with bacterial abundance arrows
+p_16S_ASV <- ggplot(data = df_nmds_16S, 
+                 mapping = aes(x = MDS1, y = MDS2, color = fac_sipop))
+p_16S_ASV <- p_16S_ASV + theme_classic()
+p_16S_ASV <- p_16S_ASV + coord_fixed(1)
+p_16S_ASV <- p_16S_ASV + xlim(-2, 2) + ylim(-2, 2)
+p_16S_ASV <- p_16S_ASV + scale_color_manual(values = col_sipop)
+p_16S_ASV <- p_16S_ASV + geom_text(aes(label = names(pop_num))#, size = 6
+                                   )
+p_16S_ASV <- p_16S_ASV + theme(legend.position = "none")
+
+#show bacterial abundance arrows(only significantly correlated)
+p_16S_ASV <- p_16S_ASV + geom_segment(data = signif_16S,
+                                      aes(x = 0, xend = NMDS1 * 1.5, y = 0, yend = NMDS2 * 1.5),
+                                      arrow = arrow(length = unit(2.5, "mm")), 
+                                      color = signif_16S$arr_col) +
+  geom_text(data = signif_16S,  
+            aes(x = NMDS1 * 1.5, y = NMDS2 * 1.5, label = Phylum), 
+            #size = 4, 
+            color = "black") 
+
+#stress value
+p_16S_ASV <- p_16S_ASV + annotate("text", x = 1.35, y = -2, #size = 6,
+                                  label = paste0("stress = ", 
+                                                 round(nmds_16S$nmds$stress, digits = 4)))
+
+ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/NMDS_bray_ASV.png"), 
+       plot = p_16S_ASV, 
+       dpi = 400, width = 150, height = 150, units = "mm")
 ```
 
 ##ITS
 
 ```{r}
-df_ITS <- data.frame(metadata, nmds_ITS$nmds$points)
+df_nmds_ITS <- data.frame(metadata, nmds_ITS$nmds$points)
 
-p_ITS <- ggplot(data = df_ITS, 
+p_ITS <- ggplot(data = df_nmds_ITS, 
                  mapping = aes(x = MDS1, y = MDS2, color = fac_sipop))
 p_ITS <- p_ITS + theme_classic()
 p_ITS <- p_ITS + coord_fixed(1)
 p_ITS <- p_ITS + xlim(-2.5, 2) + ylim(-2, 2.5)
 p_ITS <- p_ITS + scale_color_manual(values = col_sipop)
-p_ITS <- p_ITS + geom_text(aes(label = names(pop_num)), 
-                             size = 6)
+p_ITS <- p_ITS + geom_text(aes(label = names(pop_num))#, size = 6
+                           )
+p_ITS <- p_ITS + theme(legend.position = "none")
+
+#stress
 p_ITS <- p_ITS + annotate("text", 
-                            x = 1.35, y = -1.6, size = 6, 
-                            label = paste0("stress = ", 
-                                           round(nmds_ITS$nmds$stress, digits = 4)))
-p_ITS <- p_ITS + theme(legend.position = "none", 
-                         text = element_text(size = 15, family="sans"))
-p_ITS
+                          x = 1.35, y = -1.6, #size = 6, 
+                          label = paste0("stress = ", 
+                                         round(nmds_ITS$nmds$stress, digits = 4)))
+
 ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/NMDS_bray_wide.png"), 
-       plot = p_ITS, dpi = 400, width = 150, height = 150, units = "mm")
+       plot = p_ITS, 
+       dpi = 400, width = 150, height = 150, units = "mm")
+```
+
+###envfit(ASV)
+
+```{r}
+#import the result of vectorfitting of Class abundance on NMDS plot
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/envfit_bray_ASV.Rdata"))
+
+score_ITS <- scores(fit_ASV_ITS, display = "vectors")
+score_ITS <- rownames_to_column(data.frame(score_ITS))
+score_ITS <- data.frame(score_ITS, 
+                        class = fit_ASV_ITS$tax_table[score_ITS$rowname, "Class"], 
+                        p = fit_ASV_ITS$vectors$pvals, 
+                        arr_col = rep("grey", nrow(score_ITS)))
+
+signif_ITS <- score_ITS[score_ITS$p < 0.05, ]
+```
+
+```{r}
+#NMDS plot with fungal abundance arrows
+df_nmds_ITS <- data.frame(metadata, nmds_ITS$nmds$points)
+
+p_ITS_ASV <- ggplot(data = df_nmds_ITS, 
+                 mapping = aes(x = MDS1, y = MDS2, color = fac_sipop))
+p_ITS_ASV <- p_ITS_ASV + theme_classic()
+p_ITS_ASV <- p_ITS_ASV + coord_fixed(1)
+p_ITS_ASV <- p_ITS_ASV + xlim(-2.5, 2) + ylim(-2, 2.5)
+p_ITS_ASV <- p_ITS_ASV + scale_color_manual(values = col_sipop)
+p_ITS_ASV <- p_ITS_ASV + geom_text(aes(label = names(pop_num))#, size = 6
+                                   )
+
+p_ITS_ASV <- p_ITS_ASV + theme(legend.position = "none")
+
+#show fungal abundance arrows(only sigunificantly correlated
+p_ITS_ASV  <- p_ITS_ASV + geom_segment(data = signif_ITS,
+                                       aes(x = 0, xend = NMDS1 * 1.5, y = 0, yend = NMDS2 * 1.5),
+                                       arrow = arrow(length = unit(2.5, "mm")), 
+                                       color = signif_ITS$arr_col) +
+  geom_text(data = signif_ITS,  
+            aes(x = NMDS1 * 1.5, y = NMDS2 * 1.5, label = Class),
+            #size = 4, 
+            color = "black")
+
+#stress value
+p_ITS_ASV <- p_ITS_ASV + annotate("text", 
+                                  x = 1.35, y = -1.6, #size = 6, 
+                                  label = paste0("stress = ",
+                                                 round(nmds_ITS$nmds$stress, digits = 4)))
+
+ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/NMDS_bray_ASV.png"), 
+       plot = p_ITS_ASV, 
+       dpi = 400, width = 150, height = 150, units = "mm")
 ```
 
 ##legend
 
 ```{r}
-p_legend <- ggplot(data = df_16S, 
+p_legend <- ggplot(data = df_nmds_16S, 
                  mapping = aes(x = MDS1, y = MDS2, color = site))
 p_legend <- p_legend + theme_classic()
 p_legend <- p_legend + coord_fixed(1)
@@ -217,15 +320,20 @@ ggsave(grid.arrange(legend),
 ```{r}
 p_two_bray <- grid.arrange(p_16S, p_ITS, nrow = 1)
 ggsave(p_two_bray, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/NMDS_bray_both.png"), 
-       dpi = 400, width = 150, height = 75, units = "mm")
+       dpi = 400, width = 150, height = 75, units = "mm", scale = 2)
+
+p_two_bray_ASV <- grid.arrange(p_16S_ASV, p_ITS_ASV, nrow = 1)
+
+ggsave(p_two_bray_ASV, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/NMDS_bray_both_ASV.png"), 
+       dpi = 400, width = 150, height = 75, units = "mm", scale = 2)
 ```
 
 #UniFrac
 ##16S
 ```{r}
-df_16S_UF <- data.frame(metadata, nmds_16S_UF$nmds$points)
+df_nmds_16S_UF <- data.frame(metadata, nmds_16S_UF$nmds$points)
 
-p_16S_UF <- ggplot(data = df_16S_UF, 
+p_16S_UF <- ggplot(data = df_nmds_16S_UF, 
                  mapping = aes(x = MDS1, y = MDS2, color = fac_sipop))
 p_16S_UF <- p_16S_UF + theme_classic()
 p_16S_UF <- p_16S_UF + coord_fixed(1)
@@ -246,9 +354,9 @@ ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/N
 ##ITS
 
 ```{r}
-df_ITS_UF <- data.frame(metadata, nmds_ITS_UF$nmds$points)
+df_nmds_ITS_UF <- data.frame(metadata, nmds_ITS_UF$nmds$points)
 
-p_ITS_UF <- ggplot(data = df_ITS_UF, 
+p_ITS_UF <- ggplot(data = df_nmds_ITS_UF, 
                  mapping = aes(x = MDS1, y = MDS2, color = fac_sipop)) + 
   theme_classic() + 
   coord_fixed(1) + 

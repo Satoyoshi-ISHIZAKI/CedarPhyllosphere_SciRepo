@@ -2135,6 +2135,19 @@
       ],
       "Hash": "ca2757208b49f05bff682a454e3c1c5c"
     },
+    "picante": {
+      "Package": "picante",
+      "Version": "1.8.2",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "ape",
+        "methods",
+        "nlme",
+        "vegan"
+      ],
+      "Hash": "8932db8f246df2fc3ff4bd425aab6774"
+    },
     "pillar": {
       "Package": "pillar",
       "Version": "1.9.0",

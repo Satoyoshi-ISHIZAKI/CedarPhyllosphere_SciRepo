@@ -11,6 +11,7 @@ library(readxl)
 library(phyloseq)
 library(tidyverse)
 library(vegan)
+library(picante)
 library(glm2)
 library(gridExtra)
 library(gtable)
@@ -41,6 +42,8 @@ rownames(df_rarefied) <- formatC(as.numeric(rownames(df_rarefied)), width = 4, f
 tax_table <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/tax_table2_ITS.csv"), row.names = 1)
 tax_table <- as.matrix(tax_table)
 
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/trees.Rdata"))
+
 metadata <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/metadata_2306.xlsx"), 
                        sheet = "Sheet1")
 metadata <- column_to_rownames(metadata, var = "Sample_Name")
@@ -59,9 +62,13 @@ rownames(metadata_loc) <- formatC(as.numeric(rownames(metadata_loc)), width = 4,
 #alpha-diversity-indices
 
 ```{r}
+#package "vegan"
 metadata_loc$richness <- specnumber(df_rarefied)
 metadata_loc$shannon <- diversity(df_rarefied, index = "shannon")
 metadata_loc$simpson <- diversity(df_rarefied, index = "simpson")
+faith <- pd(df_rarefied, tree_rarefied2$data, include.root = TRUE)
+#faith's phylogenetic diversity(package "picante")
+metadata_loc <- cbind(metadata_loc, faith)
 ```
 
 ##richness
@@ -72,7 +79,7 @@ p_rich <- ggplot(data = metadata_loc,
   geom_point(mapping = aes(color = site), size = 2) +
   theme_classic() + 
   xlim(c(30, 41)) + #ylim(0, 300) +
-  scale_color_manual(values = c("orange3", "blue3")) +
+  scale_color_manual(values = c("blue3", "orange3")) +
   labs(x = "Latitude", y = "Richness", color = "Site") +
   theme(text = element_text(size = 10), 
         legend.position = "inside", 
@@ -84,7 +91,7 @@ p_shannon <- ggplot(data = metadata_loc,
   geom_point(mapping = aes(color = site), size = 2) +
   theme_classic() + 
   xlim(c(30, 41)) + #ylim(0, 300) +
-  scale_color_manual(values = c("orange3", "blue3")) +
+  scale_color_manual(values = c("blue3", "orange3")) +
   labs(x = "Latitude", 
        y = expression(paste("Shannon's ",  italic("H'"))), 
        color = "Site") +
@@ -95,10 +102,19 @@ p_simp <- ggplot(data = metadata_loc,
   geom_point(mapping = aes(color = site), size = 2) +
   theme_classic() + 
   xlim(c(30, 41)) + #ylim(0, 300) +
-  scale_color_manual(values = c("orange3", "blue3")) +
+  scale_color_manual(values = c("blue3", "orange3")) +
   labs(x = "Latitude", 
        y = expression(paste("Simpson's ",  italic("D"))), 
        color = "Site") +
+  theme(text = element_text(size = 10))
+
+p_faith <- ggplot(data = metadata_loc, 
+                  mapping = aes(x = latitude, y = PD)) + 
+  geom_point(mapping = aes(color = site), size = 2) +
+  theme_classic() + 
+  xlim(c(30, 41)) + #ylim(0, 300) +
+  scale_color_manual(values = c("blue3", "orange3")) +
+  labs(x = "Latitude", y = "Faith's Phylogenetic Diversity", color = "Site") +
   theme(text = element_text(size = 10))
 
 legend <- gtable_filter(ggplotGrob(p_rich), "guide-box")
@@ -108,8 +124,9 @@ legend <- gtable_filter(ggplotGrob(p_rich), "guide-box")
 p_div <- grid.arrange(p_rich + theme(legend.position = "none"), 
                       p_shannon + theme(legend.position = "none"), 
                       p_simp + theme(legend.position = "none"), 
+                      p_faith + theme(legend.position = "none"), 
                       legend, 
-                      nrow = 2, ncol = 2)
+                      nrow = 2, ncol = 3)
 
 ggsave(p_div, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/alpha_ITS.png"), 
        dpi = 400, width = 150, height = 100, units = "mm")
@@ -149,3 +166,15 @@ write.csv(cbind(summary(lm_simp)$coefficients,
                 AIC = summary(lm_simp)$aic), 
           file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/simpson_glm_gamma.csv"))
 ```
+
+```{r}
+lm_faith <- glm2(PD ~ site * latitude, 
+                data = metadata_loc, 
+                family = Gamma(link = "inverse"))
+summary(lm_faith)
+
+write.csv(cbind(summary(lm_faith)$coefficients, 
+                AIC = summary(lm_faith)$aic), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/faith_glm_gamma.csv"))
+```
+
