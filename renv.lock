@@ -391,6 +391,17 @@
       ],
       "Hash": "edff747eebfb8f2e18eed194e000caa1"
     },
+    "RcppGSL": {
+      "Package": "RcppGSL",
+      "Version": "0.3.13",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "Rcpp",
+        "stats"
+      ],
+      "Hash": "e8fc7310d256a7b6c4de8e57ab76c55d"
+    },
     "Rhdf5lib": {
       "Package": "Rhdf5lib",
       "Version": "1.24.2",
@@ -2062,6 +2073,24 @@
       ],
       "Hash": "4fd8900853b746af55b81fda99da7695"
     },
+    "mvabund": {
+      "Package": "mvabund",
+      "Version": "4.2.1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "MASS",
+        "R",
+        "Rcpp",
+        "RcppGSL",
+        "methods",
+        "parallel",
+        "statmod",
+        "stats",
+        "tweedie"
+      ],
+      "Hash": "5ecc462da7ceee1c9d2215ac553a5cb7"
+    },
     "nlme": {
       "Package": "nlme",
       "Version": "3.1-164",
@@ -2920,6 +2949,18 @@
       ],
       "Hash": "75940133cca2e339afce15a586f85b11"
     },
+    "statmod": {
+      "Package": "statmod",
+      "Version": "1.5.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "graphics",
+        "stats"
+      ],
+      "Hash": "26e158d12052c279bdd4ba858b80fb1f"
+    },
     "stringi": {
       "Package": "stringi",
       "Version": "1.8.4",
@@ -3208,6 +3249,17 @@
         "R"
       ],
       "Hash": "ef5b32c5194351ff409dfb37ca9468f1"
+    },
+    "tweedie": {
+      "Package": "tweedie",
+      "Version": "2.3.5",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "methods"
+      ],
+      "Hash": "517d541554d2e9c392f9a67f42c8b842"
     },
     "tzdb": {
       "Package": "tzdb",

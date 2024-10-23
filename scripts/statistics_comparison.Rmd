@@ -11,6 +11,7 @@ library(readxl)
 library(phyloseq)
 library(tidyverse)
 library(vegan)
+library(mvabund)
 ```
 
 #path to raw-data directory (change "path" to your raw-data directory)
@@ -29,20 +30,25 @@ source("../scripts/path.R")
 ```
 
 #read processed data
+##16S
 
 ```{r import}
-#change "16S" to "ITS" to rarefy ITS data
-df_rarefied <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/df_rarefied_ITS.csv"), row.names = 1)
-rownames(df_rarefied) <- formatC(as.numeric(rownames(df_rarefied)), width = 4, flag = "0") 
-#add 0 to the head of rownames
+#rarefied_ASV_table
+df_16S <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/df_rarefied_16S.csv"), row.names = 1)
+rownames(df_16S) <- formatC(as.numeric(rownames(df_16S)), width = 4, flag = "0") #add 0 to rownames
 
-tax_table <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/tax_table2_ITS.csv"), row.names = 1)
-tax_table <- as.matrix(tax_table)
+#tax_table
+tax_16S <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/tax_table2_16S.csv"), row.names = 1)
+tax_16S <- as.matrix(tax_16S)
 
-load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/trees.Rdata"))
+#phylogenetic tree
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/trees.Rdata"))
+tree16S <- tree2
+tree16S_rarefied <- tree_rarefied2
+rm(list = c("tree2", "tree_rarefied2"))
 
-metadata <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/metadata_2306.xlsx"), 
-                       sheet = "Sheet1")
+#metadata
+metadata <- read_excel(paste0(path_out, "/data/Sugi/metadata_2306.xlsx"), sheet = "Sheet1")
 metadata <- column_to_rownames(metadata, var = "Sample_Name")
 metadata$cloneID <- as.factor(metadata$cloneID)
 metadata$population <- as.factor(metadata$population)
@@ -50,126 +56,232 @@ metadata$site <- as.factor(metadata$site)
 metadata$date <- as.factor(metadata$date)
 ```
 
+##ITS
+
+```{r}
+#rarefied_ASV_table
+df_ITS <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/df_rarefied_ITS.csv"), row.names = 1)
+rownames(df_ITS) <- formatC(as.numeric(rownames(df_ITS)), width = 4, flag = "0") #add 0 to rownames
+
+#tax_table
+tax_ITS <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/tax_table2_ITS.csv"), row.names = 1)
+tax_ITS <- as.matrix(tax_ITS)
+
+#phylogenetic tree
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/trees.Rdata"))
+treeITS <- tree2
+treeITS_rarefied <- tree_rarefied2
+rm(list = c("tree2", "tree_rarefied2"))
+```
+
 {r, eval=FALSE}
 #data from which outliers were excluded
-df_rarefied <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/exclude/df_rarefied_ITS_out.csv"), row.names = 1)
+df_ITS_out <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/exclude/df_rarefied_ITS_out.csv"), row.names = 1)
 rownames(df_rarefied) <- formatC(as.numeric(rownames(df_rarefied)), width = 4, flag = "0") 
 #add 0 to the head of rownames
-
-tax_table <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/tax_table2_ITS.csv"), row.names = 1)
-tax_table <- as.matrix(tax_table)
-
-load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/trees.Rdata"))
-
-metadata <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/exclude/metadata_ITS_out.csv"), row.names = 1)
-rownames(metadata) <- formatC(as.numeric(rownames(metadata)), width = 4, flag = "0")
-metadata$cloneID <- as.factor(metadata$cloneID)
-metadata$population <- as.factor(metadata$population)
-metadata$site <- as.factor(metadata$site)
-metadata$date <- as.factor(metadata$date)
 
 #phyloseq_object
 
 ```{r}
-ps <- phyloseq(otu_table(df_rarefied, taxa_are_rows = FALSE), 
-               tax_table(tax_table), 
-               phy_tree(tree_rarefied2$data), 
-               sample_data(metadata))
+ps_16S <- phyloseq(otu_table(df_16S, taxa_are_rows = FALSE), 
+                   tax_table(tax_16S), 
+                   phy_tree(tree16S_rarefied$data), 
+                   sample_data(metadata))
+
+ps_ITS <- phyloseq(otu_table(df_ITS, taxa_are_rows = FALSE), 
+                   tax_table(tax_ITS), 
+                   phy_tree(treeITS_rarefied$data), 
+                   sample_data(metadata))
 ```
 
 #dist
 
 ```{r dist}
-dist_bray <- vegdist(df_rarefied, method = "bray")
-dist_UF <- UniFrac(ps, weighted = TRUE)
+dist_bray_16S <- vegdist(df_16S, method = "bray")
+dist_UF_16S <- UniFrac(ps_16S, weighted = TRUE)
+dist_bray_ITS <- vegdist(df_ITS, method = "bray")
+dist_UF_ITS <- UniFrac(ps_ITS, weighted = TRUE)
 ```
 
 # PERMANOVA
 ##bray
+###16S
 
 ```{r}
 set.seed(234)
-model_bray <- adonis2(dist_bray ~ site + population, 
+model_bray_16S <- adonis2(dist_bray_16S ~ site + population, 
                  data = metadata, 
                  perm = 999, 
                  method = "bray", 
                  by = "terms")
-model_bray
+model_bray_16S
 ```
 
 ```{r}
 set.seed(345)
-model_bray <- adonis2(dist_bray ~ site * population, 
+model_bray_16S <- adonis2(dist_bray_16S ~ site * population, 
                       data = metadata, 
                       perm = 999, 
                       by = "terms")
-model_bray
+model_bray_16S
 
-#write.csv(model_bray, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/PERMANOVA_bray.csv"))
+#write.csv(model_bray_16S, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/PERMANOVA_bray.csv"))
 ```
 
 ```{r}
 set.seed(456)
-adonis2(vegdist(df_rarefied[metadata$site == "Tsukuba", ]) ~ population, 
+adonis2(vegdist(df_16S[metadata$site == "Tsukuba", ]) ~ population, 
         data = metadata[metadata$site == "Tsukuba", ], 
         perm = 999, 
         by = "terms")
 
 set.seed(567)
-adonis2(vegdist(df_rarefied[metadata$site == "Kawatabi", ]) ~ population, 
+adonis2(vegdist(df_16S[metadata$site == "Kawatabi", ]) ~ population, 
         data = metadata[metadata$site == "Kawatabi", ], 
         perm = 999, 
         by = "terms")
 ```
 
+###ITS
+
+```{r}
+set.seed(345)
+model_bray_ITS <- adonis2(dist_bray_ITS ~ site * population, 
+                      data = metadata, 
+                      perm = 999, 
+                      by = "terms")
+model_bray_ITS
+
+#write.csv(model_bray_ITS, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/PERMANOVA_bray.csv"))
+```
+
 ##UniFrac
+###16S
 
 ```{r}
 set.seed(678)
-model_UF <- adonis2(dist_UF ~ site * population, 
+model_UF_16S <- adonis2(dist_UF_16S ~ site * population, 
                     data = metadata, 
                     perm = 999, 
                     by = "terms")
 
-model_UF
+model_UF_16S
 
-#write.csv(model_UF, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/PERMANOVA_weightedUF.csv"))
+#write.csv(model_UF_16S, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/PERMANOVA_weightedUF.csv"))
+```
+
+###ITS
+
+```{r}
+set.seed(678)
+model_UF_ITS <- adonis2(dist_UF_ITS ~ site * population, 
+                    data = metadata, 
+                    perm = 999, 
+                    by = "terms")
+
+model_UF_ITS
+
+#write.csv(model_UF_ITS, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/PERMANOVA_weightedUF.csv"))
 ```
 
 #PERMDISP
 ##bray
+###16S
 
 ```{r}
 #PERMANOVA confounds location effects and dispersion effects
 #refference: Warton, D. I., Wright, S. T., & Wang, Y. (2012). Distance‐based multivariate analyses confound location and dispersion effects. Methods in Ecology and Evolution, 3(1), 89-101.
 
 #Thus, the differences of dispersion among groups should be tested
-disp_bray <- betadisper(dist_bray, 
+disp_bray_16S <- betadisper(dist_bray_16S, 
                         metadata$site, 
                         type = "centroid")
-disp_bray
+disp_bray_16S
 
 set.seed(789)
-disptest_bray <- permutest(disp_bray, permutations = 999)
-show(disptest_bray)
-plot(disp_bray)
+disptest_bray_16S <- permutest(disp_bray_16S, permutations = 999)
+show(disptest_bray_16S)
+plot(disp_bray_16S)
 
-#write.csv(disptest_bray$tab, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/PERMDISP_bray.csv"))
+#write.csv(disptest_bray_16S$tab, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/PERMDISP_bray.csv"))
+```
+
+###ITS
+
+```{r}
+disp_bray_ITS <- betadisper(dist_bray_ITS, 
+                        metadata$site, 
+                        type = "centroid")
+disp_bray_ITS
+
+set.seed(789)
+disptest_bray_ITS <- permutest(disp_bray_ITS, permutations = 999)
+show(disptest_bray_ITS)
+plot(disp_bray_ITS)
+
+#write.csv(disptest_bray_ITS$tab, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/PERMDISP_bray.csv"))
 ```
 
 ##UniFrac
+###16S
 
 ```{r}
-disp_UniFrac <- betadisper(dist_UF, 
+disp_UF_16S <- betadisper(dist_UF_16S, 
                         metadata$site, 
                         type = "centroid")
-disp_UniFrac
+disp_UF_16S
 
 set.seed(890)
-disptest_UniFrac <- permutest(disp_UniFrac, permutations = 999)
-show(disptest_UniFrac)
-plot(disp_UniFrac)
+disptest_UF_16S <- permutest(disp_UF_16S, permutations = 999)
+show(disptest_UF_16S)
+plot(disp_UF_16S)
 
-#write.csv(disptest_UniFrac$tab, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/PERMDISP_weightedUF.csv"))
+#write.csv(disptest_UF_16S$tab, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/PERMDISP_weightedUF.csv"))
+```
+
+###ITS
+
+```{r}
+disp_UF_ITS <- betadisper(dist_UF_ITS, 
+                        metadata$site, 
+                        type = "centroid")
+disp_UF_ITS
+
+set.seed(890)
+disptest_UF_ITS <- permutest(disp_UF_ITS, permutations = 999)
+show(disptest_UF_ITS)
+plot(disp_UF_ITS)
+
+#write.csv(disptest_UF_ITS$tab, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/PERMDISP_weightedUF.csv"))
+```
+
+#multivariate GLM(mvabund)
+
+```{r}
+#may too computationally expensive
+glm_16S <- manyglm(as.matrix(df_16S) ~ metadata$site * metadata$population, 
+                   family = "negative.binomial")
+
+testglm_16S <- anova(glm_16S, 
+                     test = "LR", 
+                     resamp = "perm.resid", 
+                     nBoot = 999, 
+                     p.uni = "adjusted")
+
+#write.csv()
+```
+
+```{r}
+#may too computationally expensive
+glm_ITS <- manyglm(as.matrix(df_ITS) ~ metadata$site * metadata$population, 
+                   family = "negative.binomial")
+
+testglm_ITS <- anova(glm_ITS, 
+                     test = "LR", 
+                     resamp = "perm.resid", 
+                     nBoot = 999, 
+                     p.uni = "adjusted")
+
+#write.csv()
 ```
 
