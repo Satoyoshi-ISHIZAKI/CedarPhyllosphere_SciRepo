@@ -9,7 +9,6 @@ date: "2024-10-10"
 ```{r}
 library(readxl)
 library(tidyverse)
-library(ggrepel)
 library(sf)
 library(rnaturalearth)
 library(rnaturalearthdata)
@@ -34,6 +33,15 @@ source("../scripts/path.R")
 
 ```{r import}
 location <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/location_Sugi_pop.xlsx"), sheet = "location")
+
+#position of site name in the map
+location$Label_X <- c(147.5, 147, 148, 147.5, 143, 130, 124, 136, 125, 124, 130.5, 137, 134, 145.5)
+location$Label_Y <- c(41.5, 40, 38.5, 36.5, 30, 40.5, 40, 30, 36, 34, 27.5, 45, 43, 32)
+location$tip_X <- c(-2.8, -2.5, -3.3, -3, -0.5, 0, 1.8, 0, 2.8, 2.3, 0, 0, 0, -0.5)
+location$tip_Y <- c(0, 0, 0, 0, 0.5, -0.5, 0, 0.5, 0, 0, 0.5, -0.5, -0.5, 0.5)
+
+garden <- read_excel(paste0(path_out, "/data/Sugi/metadata_2306.xlsx"), sheet = "common_garden")
+garden$site <- as.factor(garden$site)
 ```
 
 ```{r}
@@ -46,10 +54,22 @@ map <- ggplot(data = japan) +
   coord_sf(xlim = c(122, 154), ylim = c(20, 46), expand = FALSE) +
   geom_point(data = location, aes(x = longitude, y = latitude), 
              color = "black", size = 1) +
-  geom_text_repel(data = location, 
-                  aes(x = longitude, y = latitude, label = paste0(fullname, "(", population, ")")),
-                  size = 3, segment.color = "black",
-                  box.padding = 0.7, force = 2, max.overlaps = 15) +
+  geom_point(data = garden, mapping = aes(x = longitude, y = latitude, color = site), 
+             color = c("blue3", "orange3"), size = 1.5) +
+  
+  geom_segment(data = location,
+              aes(x = longitude, y = latitude,
+                  xend = Label_X + tip_X, yend = Label_Y + tip_Y),
+              color = "black",
+              linewidth = 0.5) +
+  # Add labels at specified positions
+  geom_text(data = location,
+            aes(x = Label_X, y = Label_Y, label = paste0(fullname, "(", population, ")")),
+            size = 3) +
+  
+  coord_sf(xlim = c(120, 156), # Extended map boundaries to accommodate labels
+          ylim = c(25, 46), 
+          expand = FALSE) +
   xlab("Longitude") + ylab("Latitude") +
   theme_classic()
 

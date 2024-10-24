@@ -80,40 +80,26 @@ col_BVOC <- c(colorRampPalette(c("green2", "grey30", "yellow2"))(12),
               "purple3", "blue3")
 
 #draw barplot
-p_BVOC <- ggplot(data = BVOC_2306_ga, mapping = aes(x = ID, 
-                                                    y = emission, 
+p_BVOC <- ggplot(data = BVOC_2306_ga, mapping = aes(x = ID, y = emission, 
                                                     fill = factor(BVOC, 
                                                                   levels = colnames(BVOC_2306))))
 p_BVOC <- p_BVOC + geom_bar(stat = "identity")
 p_BVOC <- p_BVOC + theme_classic()
 p_BVOC <- p_BVOC + scale_fill_manual(values = col_BVOC)
 p_BVOC <- p_BVOC + scale_y_continuous(labels = label_comma())
-p_BVOC <- p_BVOC + facet_wrap(~ population, scales = "free_x", 
-                              labeller = as_labeller(c("AJ" = "Ajigazawa", 
-                                                       "AZ" = "Azouji", 
-                                                       "YK" = "Yakushima")))
+p_BVOC <- p_BVOC + facet_wrap(~ population, scales = "free_x")
 p_BVOC <- p_BVOC + labs(fill = "Terpenes")
 p_BVOC <- p_BVOC + 
   ylab(expression(paste("Basal Emission Rate (ng ", {gdw^-1}, " ", {h^-1}, ")")))
 p_BVOC <- p_BVOC + theme(axis.title.x = element_blank(), 
-                         axis.text.x = element_text(size = 3, 
-                                                    angle = 90, 
-                                                    vjust = 0.3), 
+                         axis.text.x = element_blank(), 
                          axis.ticks.x = element_blank(), 
                          
-                         axis.text.y = element_text(size = 4), 
-                         axis.title.y = element_text(size = 5), 
-                         
-                         strip.text.x = element_text(size = 5), 
-                         axis.line = element_line(linewidth = 0.4), 
-                         
-                         legend.title = element_text(size = 5), 
-                         legend.text = element_text(size = 3.5), 
-                         legend.key.size = unit(1.5, "mm"))
+                         legend.key.size = unit(3, "mm"))
 show(p_BVOC)
 
 ggsave(plot = p_BVOC, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_BVOC.png"), 
-       dpi = 400, width = 75, height = 40, units = "mm")
+       dpi = 400, width = 150, height = 80, units = "mm")
 ```
 
 #log_transform

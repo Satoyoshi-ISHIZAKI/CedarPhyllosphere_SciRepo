@@ -12,6 +12,7 @@ library(phyloseq)
 library(tidyverse)
 library(vegan)
 library(gridExtra)
+library(grid)
 library(gtable)
 ```
 
@@ -28,6 +29,7 @@ source("../scripts/path.R")
 
 ```{r}
 source("../R/occurrence.R")
+source("../R/label.R")
 ```
 
 #read processed data
@@ -158,7 +160,7 @@ p_16S <- p_16S + geom_text(aes(label = names(pop_num))#, size = 6
 
 p_16S <- p_16S + annotate("text", 
                           x = 1.35, y = -2, #size = 6, 
-                          label = paste0("stress = ", 
+                          label = paste0("Stress = ", 
                                          round(nmds_16S$nmds$stress, digits = 4)))
 p_16S <- p_16S + theme(legend.position = "none")
 
@@ -191,8 +193,7 @@ p_16S_ASV <- p_16S_ASV + theme_classic()
 p_16S_ASV <- p_16S_ASV + coord_fixed(1)
 p_16S_ASV <- p_16S_ASV + xlim(-2, 2) + ylim(-2, 2)
 p_16S_ASV <- p_16S_ASV + scale_color_manual(values = col_sipop)
-p_16S_ASV <- p_16S_ASV + geom_text(aes(label = names(pop_num))#, size = 6
-                                   )
+p_16S_ASV <- p_16S_ASV + geom_text(aes(label = names(pop_num)))
 p_16S_ASV <- p_16S_ASV + theme(legend.position = "none")
 
 #show bacterial abundance arrows(only significantly correlated)
@@ -202,12 +203,11 @@ p_16S_ASV <- p_16S_ASV + geom_segment(data = signif_16S,
                                       color = signif_16S$arr_col) +
   geom_text(data = signif_16S,  
             aes(x = NMDS1 * 1.5, y = NMDS2 * 1.5, label = Phylum), 
-            #size = 4, 
             color = "black") 
 
 #stress value
-p_16S_ASV <- p_16S_ASV + annotate("text", x = 1.35, y = -2, #size = 6,
-                                  label = paste0("stress = ", 
+p_16S_ASV <- p_16S_ASV + annotate("text", x = 1.35, y = -2,
+                                  label = paste0("Stress = ", 
                                                  round(nmds_16S$nmds$stress, digits = 4)))
 
 ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/NMDS_bray_ASV.png"), 
@@ -232,8 +232,8 @@ p_ITS <- p_ITS + theme(legend.position = "none")
 
 #stress
 p_ITS <- p_ITS + annotate("text", 
-                          x = 1.35, y = -1.6, #size = 6, 
-                          label = paste0("stress = ", 
+                          x = 1.5, y = -2,
+                          label = paste0("Stress = ", 
                                          round(nmds_ITS$nmds$stress, digits = 4)))
 
 ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/NMDS_bray_wide.png"), 
@@ -284,8 +284,8 @@ p_ITS_ASV  <- p_ITS_ASV + geom_segment(data = signif_ITS,
 
 #stress value
 p_ITS_ASV <- p_ITS_ASV + annotate("text", 
-                                  x = 1.35, y = -1.6, #size = 6, 
-                                  label = paste0("stress = ",
+                                  x = 1.5, y = -2,
+                                  label = paste0("Stress = ",
                                                  round(nmds_ITS$nmds$stress, digits = 4)))
 
 ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/NMDS_bray_ASV.png"), 
@@ -318,12 +318,17 @@ ggsave(grid.arrange(legend),
 ##layout two plots
 
 ```{r}
-p_two_bray <- grid.arrange(p_16S, p_ITS, nrow = 1)
+p_16S_label <- arrangeGrob(p_16S, top = create_label("a"))
+p_ITS_label <- arrangeGrob(p_ITS, top = create_label("b"))
+
+p_two_bray <- grid.arrange(p_16S_label, p_ITS_label, nrow = 1)
 ggsave(p_two_bray, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/NMDS_bray_both.png"), 
        dpi = 400, width = 150, height = 75, units = "mm", scale = 2)
 
-p_two_bray_ASV <- grid.arrange(p_16S_ASV, p_ITS_ASV, nrow = 1)
+p_16S_ASV_label <- arrangeGrob(p_16S_ASV, top = create_label("a"))
+p_ITS_ASV_label <- arrangeGrob(p_ITS_ASV, top = create_label("b"))
 
+p_two_bray_ASV <- grid.arrange(p_16S_ASV_label, p_ITS_ASV_label, nrow = 1)
 ggsave(p_two_bray_ASV, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/NMDS_bray_both_ASV.png"), 
        dpi = 400, width = 150, height = 75, units = "mm", scale = 2)
 ```

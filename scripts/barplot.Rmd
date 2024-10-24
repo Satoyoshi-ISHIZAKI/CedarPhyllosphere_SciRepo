@@ -13,6 +13,9 @@ library(phyloseq)
 library(fantaxtic)
 library(ggnested)
 library(ggtext)
+library(gridExtra)
+library(grid)
+library(gtable)
 ```
 
 #path to raw-data directory (change "path" to your raw-data directory)
@@ -25,78 +28,148 @@ source("../scripts/path.R")
 ```
 
 #source codes
-
-#read processed data
-
-```{r import}
-#change "16S" to "ITS" to rarefy ITS data
-
-otus_data <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/otus_data_ITS.csv"), row.names = 1)
-rownames(otus_data) <- formatC(as.numeric(rownames(otus_data)), width = 4, flag = "0") #add 0 to rownames
-
-tax_table <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/tax_table2_ITS.csv"), row.names = 1)
-tax_table <- as.matrix(tax_table)
-
-metadata <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/metadata_2306.xlsx"), 
-                       sheet = "Sheet1")
-metadata <- column_to_rownames(metadata, var = "Sample_Name")
-
-load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/trees.Rdata"))
+```{r}
+source("../R/label.R")
 ```
 
-```{r}
+#read processed data
+##16S
+
+```{r import}
+otus_16S <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/otus_data_16S.csv"), row.names = 1)
+rownames(otus_16S) <- formatC(as.numeric(rownames(otus_16S)), width = 4, flag = "0") #add 0 to rownames
+
+#tax_table
+tax_16S <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/tax_table2_16S.csv"), row.names = 1)
+tax_16S <- as.matrix(tax_16S)
+
+#phylogenetic tree
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/trees.Rdata"))
+tree16S <- tree2
+tree16S_rarefied <- tree_rarefied2
+rm(list = c("tree2", "tree_rarefied2"))
+
+#metadata
+metadata <- read_excel(paste0(path_out, "/data/Sugi/metadata_2306.xlsx"), sheet = "Sheet1")
+metadata <- column_to_rownames(metadata, var = "Sample_Name")
 metadata$cloneID <- as.factor(metadata$cloneID)
 metadata$population <- as.factor(metadata$population)
 metadata$site <- as.factor(metadata$site)
 metadata$date <- as.factor(metadata$date)
+```
 
+##ITS
+
+```{r}
+otus_ITS <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/otus_data_ITS.csv"), row.names = 1)
+rownames(otus_ITS) <- formatC(as.numeric(rownames(otus_ITS)), width = 4, flag = "0") #add 0 to rownames
+
+#tax_table
+tax_ITS <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/tax_table2_ITS.csv"), row.names = 1)
+tax_ITS <- as.matrix(tax_ITS)
+
+#phylogenetic tree
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/trees.Rdata"))
+treeITS <- tree2
+treeITS_rarefied <- tree_rarefied2
+rm(list = c("tree2", "tree_rarefied2"))
+```
+
+
+```{r}
 # add clone_ID to rownames (why needed?)
-rownames(otus_data) <- paste0(rownames(metadata), "_", metadata$population)
+rownames(otus_16S) <- paste0(rownames(metadata), "_", metadata$population)
+rownames(otus_ITS) <- paste0(rownames(metadata), "_", metadata$population)
 rownames(metadata) <- paste0(rownames(metadata), "_", metadata$population)
 ```
 
-#barplot
+#phyloseq_object
 
 ```{r barplot}
-ps_0 <- phyloseq(otu_table(otus_data[51:108, ], taxa_are_rows = F), 
-                 tax_table(tax_table), 
-                 phy_tree(tree2$data), 
-                 sample_data(metadata[51:108, ])) #change row indices to choose samples included in barplots
+ps_16S <- phyloseq(otu_table(otus_16S, taxa_are_rows = F), 
+                 tax_table(tax_16S), 
+                 phy_tree(tree16S$data), 
+                 sample_data(metadata)) #change row indices to choose samples included in barplots
+ps_ITS <- phyloseq(otu_table(otus_ITS, taxa_are_rows = F), 
+                 tax_table(tax_ITS), 
+                 phy_tree(treeITS$data), 
+                 sample_data(metadata))
 ```
+
+#plot
+##16S
 
 ```{r, cache=TRUE, dependson="barplot"}
 #select highly abundant taxa
-top_asv <- nested_top_taxa(ps_obj = ps_0, 
-                    top_tax_level = "Class", 
-                    n_top_taxa = 3, 
-                    nested_tax_level = "Genus", 
-                    n_nested_taxa = 2, 
-                    grouping = "site")
+top_16S <- nested_top_taxa(ps_obj = ps_16S, 
+                           top_tax_level = "Phylum",
+                           n_top_taxa = 2,
+                           nested_tax_level = "Genus", 
+                           n_nested_taxa = 3, 
+                           grouping = "site")
 ```
 
 ```{r}
-p_comp <- plot_nested_bar(ps_obj = top_asv$ps_obj, 
-                      top_level = "Class", 
-                      nested_level = "Genus")
-p_comp <- p_comp + theme_classic()
-p_comp <- p_comp + facet_wrap(~ site, 
-                      scales = "free_x")
-p_comp <- p_comp + labs(y = "Relative Abundance")
-p_comp <- p_comp + theme(axis.title.x = element_blank(), 
-                         #axis.text.x = element_blank(), 
-                         axis.text.x = element_text(size = 2, angle = 45, vjust = 1.5,hjust = 1.2), 
-                         axis.ticks.x = element_blank(), 
-                         axis.title.y = element_text(size = 6), 
-                         axis.text.y = element_text(size = 4), 
-                         strip.background.x = element_rect(color = "black", 
-                                                           fill = "white"), 
-                         strip.text.x = element_text(color = "black", 
-                                                     size = 6), 
-                         legend.title = element_text(size = 6), 
-                         legend.text = element_markdown(size = 5), 
-                         legend.key.size = unit(1, "mm"))
-show(p_comp)
-ggsave(plot = p_comp, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/barplot_ITS_kawatabi.png"), 
-       dpi = 400, width = 75, height = 40, units = "mm")
+p_16S <- plot_nested_bar(ps_obj = top_16S$ps_obj, 
+                         top_level = "Phylum", 
+                         nested_level = "Genus") +
+  theme_classic() +
+  facet_wrap(~ site, scales = "free_x") +
+  labs(y = "Relative Abundance") +
+  theme(axis.title.x = element_blank(), 
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        
+        strip.background.x = element_rect(color = "black", fill = "white"),
+        legend.text = element_markdown(), 
+        legend.key.size = unit(1.5, "mm"))
+
+show(p_16S)
+ggsave(plot = p_16S, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_16S.png"), 
+       dpi = 400, width = 150, height = 80, units = "mm")
 #(A4, margin = c(25.4, 25.4), units = "mm")
 ```
+
+##ITS
+
+```{r}
+top_ITS <- nested_top_taxa(ps_obj = ps_ITS, 
+                           top_tax_level = "Class",
+                           n_top_taxa = 3,
+                           nested_tax_level = "Genus", 
+                           n_nested_taxa = 2,
+                           grouping = "site")
+```
+
+```{r}
+p_ITS <- plot_nested_bar(ps_obj = top_ITS$ps_obj, 
+                      top_level = "Class", 
+                      nested_level = "Genus") +
+  theme_classic() +
+  facet_wrap(~ site, scales = "free_x") +
+  labs(y = "Relative Abundance") +
+  theme(axis.title.x = element_blank(), 
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        
+        strip.background.x = element_rect(color = "black", fill = "white"),
+        legend.text = element_markdown(), 
+        legend.key.size = unit(1.5, "mm"))
+
+show(p_ITS)
+ggsave(plot = p_ITS, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/barplot_ITS.png"), 
+       dpi = 400, width = 150, height = 80, units = "mm")
+#(A4, margin = c(25.4, 25.4), units = "mm")
+```
+
+#arrange tow plots
+
+```{r}
+p_16S_label <- arrangeGrob(p_16S, top = create_label("a"))
+p_ITS_label <- arrangeGrob(p_ITS, top = create_label("b"))
+
+p_two_bar <- grid.arrange(p_16S_label, p_ITS_label, nrow = 1)
+ggsave(p_two_bar, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_both.png"), 
+       dpi = 400, width = 150, height = 80, units = "mm", scale = 2)
+```
+
