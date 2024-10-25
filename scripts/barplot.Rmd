@@ -83,17 +83,41 @@ rownames(otus_ITS) <- paste0(rownames(metadata), "_", metadata$population)
 rownames(metadata) <- paste0(rownames(metadata), "_", metadata$population)
 ```
 
+#arrange data
+
+```{r}
+#sort metadata in decreacing order accordance with latitude
+meta_lat <- metadata %>%
+  arrange(latitude) %>%
+  arrange(site)
+
+otus_16S_lat <- otus_16S[rownames(meta_lat), ]
+otus_ITS_lat <- otus_ITS[rownames(meta_lat), ]
+
+#make xlabel vector (population name of samples at center position within samples with the same population)
+site_pop <- as.factor(paste0(meta_lat$site, "_", meta_lat$population))
+sitepop_row <- sapply(levels(site_pop), grep, site_pop)
+vline <- sapply(sitepop_row, min)
+sitepop_row <- sapply(sitepop_row, median)
+sitepop_row <- sapply(sitepop_row, floor)
+
+meta_lat$xlab <- rep("", nrow(meta_lat))
+meta_lat$xlab[sitepop_row] <- as.character(meta_lat$population[sitepop_row])
+
+vline = data.frame("line" = vline - 0.5)
+```
+
 #phyloseq_object
 
 ```{r barplot}
-ps_16S <- phyloseq(otu_table(otus_16S, taxa_are_rows = F), 
+ps_16S <- phyloseq(otu_table(otus_16S_lat, taxa_are_rows = F), 
                  tax_table(tax_16S), 
                  phy_tree(tree16S$data), 
-                 sample_data(metadata)) #change row indices to choose samples included in barplots
-ps_ITS <- phyloseq(otu_table(otus_ITS, taxa_are_rows = F), 
+                 sample_data(meta_lat)) #change row indices to choose samples included in barplots
+ps_ITS <- phyloseq(otu_table(otus_ITS_lat, taxa_are_rows = F), 
                  tax_table(tax_ITS), 
                  phy_tree(treeITS$data), 
-                 sample_data(metadata))
+                 sample_data(meta_lat))
 ```
 
 #plot
@@ -105,29 +129,53 @@ top_16S <- nested_top_taxa(ps_obj = ps_16S,
                            top_tax_level = "Phylum",
                            n_top_taxa = 2,
                            nested_tax_level = "Genus", 
-                           n_nested_taxa = 3, 
+                           n_nested_taxa = 4, 
                            grouping = "site")
 ```
 
+###kawatabi
+
 ```{r}
-p_16S <- plot_nested_bar(ps_obj = top_16S$ps_obj, 
+top_16S_k <- subset_samples(top_16S$ps_obj, site == "Kawatabi")
+
+p_16S_k <- plot_nested_bar(ps_obj = top_16S_k, 
                          top_level = "Phylum", 
                          nested_level = "Genus") +
   theme_classic() +
-  facet_wrap(~ site, scales = "free_x") +
-  labs(y = "Relative Abundance") +
-  theme(axis.title.x = element_blank(), 
-        axis.text.x = element_blank(),
+  scale_x_discrete(labels = meta_lat[meta_lat$site == "Kawatabi", "xlab"]) +
+  geom_vline(xintercept = vline[1:14, "line"], 
+             linetype = "dashed", color = "black") +
+  labs(x = "Kawatabi", y = "Relative Abundance") +
+  theme(axis.title.x = element_text(), 
+        axis.text.x = element_text(),
         axis.ticks.x = element_blank(),
         
-        strip.background.x = element_rect(color = "black", fill = "white"),
-        legend.text = element_markdown(), 
-        legend.key.size = unit(1.5, "mm"))
+        legend.text = element_markdown(size = 8.5), 
+        legend.key.size = unit(7, "mm"), 
+        legend.margin = margin(t = 0, r = 0, b = 0, l = 0), 
+        legend.position = "inside")
+```
 
-show(p_16S)
-ggsave(plot = p_16S, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_16S.png"), 
-       dpi = 400, width = 150, height = 80, units = "mm")
-#(A4, margin = c(25.4, 25.4), units = "mm")
+###tsukuba
+
+```{r}
+top_16S_t <- subset_samples(top_16S$ps_obj, site == "Tsukuba")
+
+p_16S_t <- plot_nested_bar(ps_obj = top_16S_t, 
+                         top_level = "Phylum", 
+                         nested_level = "Genus") +
+  theme_classic() +
+  scale_x_discrete(labels = meta_lat[meta_lat$site == "Tsukuba", "xlab"]) +
+  geom_vline(xintercept = vline[15:28, "line"]-58, 
+             linetype = "dashed", color = "black") +
+  labs(x = "Tsukuba", y = "Relative Abundance") +
+  theme(axis.title.x = element_text(), 
+        axis.text.x = element_text(),
+        axis.ticks.x = element_blank(),
+        
+        legend.text = element_markdown(), 
+        legend.key.size = unit(5, "mm"), 
+        legend.position = "inside")
 ```
 
 ##ITS
@@ -137,39 +185,82 @@ top_ITS <- nested_top_taxa(ps_obj = ps_ITS,
                            top_tax_level = "Class",
                            n_top_taxa = 3,
                            nested_tax_level = "Genus", 
-                           n_nested_taxa = 2,
+                           n_nested_taxa = 3,
                            grouping = "site")
 ```
 
+###kawatabi
+
 ```{r}
-p_ITS <- plot_nested_bar(ps_obj = top_ITS$ps_obj, 
+top_ITS_k <- subset_samples(top_ITS$ps_obj, site == "Kawatabi")
+
+p_ITS_k <- plot_nested_bar(ps_obj = top_ITS_k, 
                       top_level = "Class", 
                       nested_level = "Genus") +
   theme_classic() +
-  facet_wrap(~ site, scales = "free_x") +
-  labs(y = "Relative Abundance") +
-  theme(axis.title.x = element_blank(), 
-        axis.text.x = element_blank(),
+  scale_x_discrete(labels = meta_lat[meta_lat$site == "Kawatabi", "xlab"]) +
+  geom_vline(xintercept = vline[1:14, "line"], 
+             linetype = "dashed", color = "black") +
+  labs(x = "Kawatabi", y = "Relative Abundance") +
+  theme(axis.title.x = element_text(), 
+        axis.text.x = element_text(),
         axis.ticks.x = element_blank(),
         
-        strip.background.x = element_rect(color = "black", fill = "white"),
-        legend.text = element_markdown(), 
-        legend.key.size = unit(1.5, "mm"))
+        legend.text = element_markdown(size = 8.5), 
+        legend.key.size = unit(7, "mm"), 
+        legend.margin = margin(t = 0, r = 0, b = 0, l = 0),
+        legend.position = "inside")
+```
 
-show(p_ITS)
-ggsave(plot = p_ITS, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/barplot_ITS.png"), 
-       dpi = 400, width = 150, height = 80, units = "mm")
-#(A4, margin = c(25.4, 25.4), units = "mm")
+###tsukuba
+
+```{r}
+top_ITS_t <- subset_samples(top_ITS$ps_obj, site == "Tsukuba")
+
+p_ITS_t <- plot_nested_bar(ps_obj = top_ITS_t, 
+                      top_level = "Class", 
+                      nested_level = "Genus") +
+  theme_classic() +
+  scale_x_discrete(labels = meta_lat[meta_lat$site == "Tsukuba", "xlab"]) +
+  geom_vline(xintercept = vline[15:28, "line"]-58, 
+             linetype = "dashed", color = "black") +
+  labs(x = "Tsukuba", y = "Relative Abundance") +
+  theme(axis.title.x = element_text(), 
+        axis.text.x = element_text(),
+        axis.ticks.x = element_blank(),
+        
+        legend.text = element_markdown(), 
+        legend.key.size = unit(5, "mm"), 
+        legend.position = "inside")
 ```
 
 #arrange tow plots
 
 ```{r}
-p_16S_label <- arrangeGrob(p_16S, top = create_label("a"))
-p_ITS_label <- arrangeGrob(p_ITS, top = create_label("b"))
+legend_16S <- gtable_filter(ggplotGrob(p_16S_k), "guide-box")
+legend_ITS <- gtable_filter(ggplotGrob(p_ITS_k), "guide-box")
 
-p_two_bar <- grid.arrange(p_16S_label, p_ITS_label, nrow = 1)
-ggsave(p_two_bar, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_both.png"), 
+pl_16S_k <- p_16S_k + theme(legend.position = "none")
+pl_16S_t <- p_16S_t + theme(legend.position = "none")
+pl_ITS_k <- p_ITS_k + theme(legend.position = "none")
+pl_ITS_t <- p_ITS_t + theme(legend.position = "none")
+
+pl_16S_k <- arrangeGrob(pl_16S_k, top = create_label("a"))
+pl_16S_t <- arrangeGrob(pl_16S_t, top = create_label("b"))
+pl_ITS_k <- arrangeGrob(pl_ITS_k, top = create_label("c"))
+pl_ITS_t <- arrangeGrob(pl_ITS_t, top = create_label("d"))
+
+p_16S <- grid.arrange(pl_16S_k, pl_16S_t, nrow = 1)
+p_ITS <- grid.arrange(pl_ITS_k, pl_ITS_t, nrow = 1)
+
+p_all <- grid.arrange(pl_16S_k, pl_16S_t, legend_16S, pl_ITS_k, pl_ITS_t, legend_ITS, 
+                          nrow = 2, ncol = 3)
+
+ggsave(plot = p_16S, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_16S.png"), 
        dpi = 400, width = 150, height = 80, units = "mm", scale = 2)
+ggsave(plot = p_ITS, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/barplot_ITS.png"), 
+       dpi = 400, width = 150, height = 80, units = "mm", scale = 2)
+ggsave(p_all, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_both.png"), 
+       dpi = 400, width = 150, height = 160, units = "mm", scale = 2)
 ```
 

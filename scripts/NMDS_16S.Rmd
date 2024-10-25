@@ -63,6 +63,7 @@ ps <- phyloseq(otu_table(df_rarefied, taxa_are_rows = FALSE),
 ```{r dist}
 dist_bray <- vegdist(df_rarefied, method = "bray")
 dist_UF_wei <- UniFrac(ps, weighted = TRUE)
+dist_unUF <- UniFrac(ps, weighted = FALSE)
 ```
 
 #NMDS_bray
@@ -168,5 +169,17 @@ p_nmds <- p_nmds + theme(legend.position = "none",
 p_nmds
 ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/NMDS_UF_wide.png"), 
        plot = p_nmds, dpi = 400, width = 150, height = 150, units = "mm")
+```
+
+#NMDS_unUF
+
+```{r}
+nmds_unUF <- bestNMDS(dist_unUF)
+```
+
+```{r}
+stressplot(nmds_unUF$nmds)
+nmds_unUF$nmds$stress
+save(nmds_unUF, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/NMDS_unweightedUF_16S.Rdata"))
 ```
 

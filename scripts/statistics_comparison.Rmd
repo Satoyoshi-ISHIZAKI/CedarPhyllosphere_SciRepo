@@ -99,8 +99,10 @@ ps_ITS <- phyloseq(otu_table(df_ITS, taxa_are_rows = FALSE),
 ```{r dist}
 dist_bray_16S <- vegdist(df_16S, method = "bray")
 dist_UF_16S <- UniFrac(ps_16S, weighted = TRUE)
+dist_unUF_16S <- UniFrac(ps_16S, weighted = FALSE)
 dist_bray_ITS <- vegdist(df_ITS, method = "bray")
 dist_UF_ITS <- UniFrac(ps_ITS, weighted = TRUE)
+dist_unUF_ITS <- UniFrac(ps_ITS, weighted = FALSE)
 ```
 
 # PERMANOVA
@@ -184,6 +186,35 @@ model_UF_ITS
 #write.csv(model_UF_ITS, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/PERMANOVA_weightedUF.csv"))
 ```
 
+##unweighted UF
+###16S
+
+```{r}
+set.seed(135)
+model_unUF_16S <- adonis2(dist_unUF_16S ~ site * population, 
+                    data = metadata, 
+                    perm = 999, 
+                    by = "terms")
+
+model_unUF_16S
+
+write.csv(model_unUF_16S, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/PERMANOVA_unweightedUF.csv"))
+```
+
+###ITS
+
+```{r}
+set.seed(135)
+model_unUF_ITS <- adonis2(dist_unUF_ITS ~ site * population, 
+                    data = metadata, 
+                    perm = 999, 
+                    by = "terms")
+
+model_unUF_ITS
+
+write.csv(model_unUF_ITS, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/PERMANOVA_unweightedUF.csv"))
+```
+
 #PERMDISP
 ##bray
 ###16S
@@ -253,6 +284,39 @@ show(disptest_UF_ITS)
 plot(disp_UF_ITS)
 
 #write.csv(disptest_UF_ITS$tab, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/PERMDISP_weightedUF.csv"))
+```
+
+##unweighted UF
+###16S
+
+```{r}
+disp_unUF_16S <- betadisper(dist_unUF_16S, 
+                        metadata$site, 
+                        type = "centroid")
+disp_unUF_16S
+
+set.seed(246)
+disptest_unUF_16S <- permutest(disp_unUF_16S, permutations = 999)
+show(disptest_unUF_16S)
+plot(disp_unUF_16S)
+
+#write.csv(disptest_unUF_16S$tab, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/PERMDISP_unweightedUF.csv"))
+```
+
+###ITS
+
+```{r}
+disp_unUF_ITS <- betadisper(dist_unUF_ITS, 
+                        metadata$site, 
+                        type = "centroid")
+disp_unUF_ITS
+
+set.seed(246)
+disptest_unUF_ITS <- permutest(disp_unUF_ITS, permutations = 999)
+show(disptest_unUF_ITS)
+plot(disp_unUF_ITS)
+
+#write.csv(disptest_unUF_ITS$tab, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/PERMDISP_unweightedUF.csv"))
 ```
 
 #multivariate GLM(mvabund)

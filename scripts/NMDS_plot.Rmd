@@ -66,6 +66,10 @@ rm(nmds_bray)
 load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/NMDS_weightedUF_16S.Rdata"))
 nmds_16S_UF <- nmds_UF
 rm(nmds_UF)
+
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/NMDS_unweightedUF_16S.Rdata"))
+nmds_16S_unUF <- nmds_unUF
+rm(nmds_unUF)
 ```
 
 ##ITS
@@ -93,6 +97,10 @@ rm(nmds_bray)
 load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/NMDS_weightedUF_ITS.Rdata"))
 nmds_ITS_UF <- nmds_UF
 rm(nmds_UF)
+
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/NMDS_unweightedUF_ITS.Rdata"))
+nmds_ITS_unUF <- nmds_unUF
+rm(nmds_unUF)
 ```
 
 #phyloseq object
@@ -139,8 +147,8 @@ pop_num <- unlist(lapply(pop_num, function(x) replace_rule[x]))
 #set (site * population) levels
 fac_sipop <- as.factor(paste0(metadata$site, LETTERS[pop_num]))
 #assign colors to each element
-col_sipop <- c(alpha("blue", seq(0.5, 1, length.out = length(replace_rule))), 
-               alpha("orange3", seq(0.5, 1, length.out = length(replace_rule)))
+col_sipop <- c(alpha("blue", seq(0.2, 1, length.out = length(replace_rule))), 
+               alpha("orange3", seq(0.2, 1, length.out = length(replace_rule)))
                )
 ```
 
@@ -155,11 +163,10 @@ p_16S <- p_16S + theme_classic()
 p_16S <- p_16S + coord_fixed(1)
 p_16S <- p_16S + xlim(-2, 2) + ylim(-2, 2)
 p_16S <- p_16S + scale_color_manual(values = col_sipop)
-p_16S <- p_16S + geom_text(aes(label = names(pop_num))#, size = 6
-                           )
+p_16S <- p_16S + geom_point()
 
 p_16S <- p_16S + annotate("text", 
-                          x = 1.35, y = -2, #size = 6, 
+                          x = 1.35, y = -2,
                           label = paste0("Stress = ", 
                                          round(nmds_16S$nmds$stress, digits = 4)))
 p_16S <- p_16S + theme(legend.position = "none")
@@ -193,7 +200,7 @@ p_16S_ASV <- p_16S_ASV + theme_classic()
 p_16S_ASV <- p_16S_ASV + coord_fixed(1)
 p_16S_ASV <- p_16S_ASV + xlim(-2, 2) + ylim(-2, 2)
 p_16S_ASV <- p_16S_ASV + scale_color_manual(values = col_sipop)
-p_16S_ASV <- p_16S_ASV + geom_text(aes(label = names(pop_num)))
+p_16S_ASV <- p_16S_ASV + geom_point()
 p_16S_ASV <- p_16S_ASV + theme(legend.position = "none")
 
 #show bacterial abundance arrows(only significantly correlated)
@@ -226,8 +233,7 @@ p_ITS <- p_ITS + theme_classic()
 p_ITS <- p_ITS + coord_fixed(1)
 p_ITS <- p_ITS + xlim(-2.5, 2) + ylim(-2, 2.5)
 p_ITS <- p_ITS + scale_color_manual(values = col_sipop)
-p_ITS <- p_ITS + geom_text(aes(label = names(pop_num))#, size = 6
-                           )
+p_ITS <- p_ITS + geom_point()
 p_ITS <- p_ITS + theme(legend.position = "none")
 
 #stress
@@ -267,8 +273,7 @@ p_ITS_ASV <- p_ITS_ASV + theme_classic()
 p_ITS_ASV <- p_ITS_ASV + coord_fixed(1)
 p_ITS_ASV <- p_ITS_ASV + xlim(-2.5, 2) + ylim(-2, 2.5)
 p_ITS_ASV <- p_ITS_ASV + scale_color_manual(values = col_sipop)
-p_ITS_ASV <- p_ITS_ASV + geom_text(aes(label = names(pop_num))#, size = 6
-                                   )
+p_ITS_ASV <- p_ITS_ASV + geom_point()
 
 p_ITS_ASV <- p_ITS_ASV + theme(legend.position = "none")
 
@@ -344,16 +349,15 @@ p_16S_UF <- p_16S_UF + theme_classic()
 p_16S_UF <- p_16S_UF + coord_fixed(1)
 p_16S_UF <- p_16S_UF + xlim(-0.15, 0.1) + ylim(-0.15, 0.1)
 p_16S_UF <- p_16S_UF + scale_color_manual(values = col_sipop)
-p_16S_UF <- p_16S_UF + geom_text(aes(label = names(pop_num)), size = 3)
+p_16S_UF <- p_16S_UF + geom_point()
 p_16S_UF <- p_16S_UF + annotate("text", 
-                                x = 0.05, y = -0.14, size = 3, 
+                                x = 0.05, y = -0.15,
                                 label = paste0("stress = ", 
                                                round(nmds_16S_UF$nmds$stress, digits = 5)))
-p_16S_UF <- p_16S_UF + theme(legend.position = "none", 
-                         text = element_text(size = 7.5, family="sans"))
+p_16S_UF <- p_16S_UF + theme(legend.position = "none")
 p_16S_UF
 ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/NMDS_UF.png"), 
-       plot = p_16S_UF, dpi = 400, width = 75, height = 75, units = "mm")
+       plot = p_16S_UF, dpi = 400, width = 150, height = 150, units = "mm")
 ```
 
 ##ITS
@@ -367,22 +371,78 @@ p_ITS_UF <- ggplot(data = df_nmds_ITS_UF,
   coord_fixed(1) + 
   xlim(-0.12, 0.04) + ylim(-0.08, 0.08) + 
   scale_color_manual(values = col_sipop) + 
-  geom_text(aes(label = names(pop_num)), size = 2.5) + 
-  annotate("text", x = 0.005, y = -0.07, size = 3, 
+  geom_point() + 
+  annotate("text", x = 0.015, y = -0.08,
            label = paste0("stress = ", 
                           round(nmds_ITS_UF$nmds$stress, digits = 5))) + 
-  theme(legend.position = "none", 
-        text = element_text(size = 7.5, family="sans"))
+  theme(legend.position = "none")
 p_ITS_UF
 ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/NMDS_UF.png"), 
-       plot = p_ITS_UF, dpi = 400, width = 75, height = 75, units = "mm")
+       plot = p_ITS_UF, dpi = 400, width = 150, height = 150, units = "mm")
 ```
 
 #layout two plots(UF)
 
 ```{r}
-p_two_UF <- grid.arrange(p_16S_UF, p_ITS_UF, nrow = 1)
+p_16SUF_label <- arrangeGrob(p_16S_UF, top = create_label("a"))
+p_ITSUF_label <- arrangeGrob(p_ITS_UF, top = create_label("b"))
+
+p_two_UF <- grid.arrange(p_16SUF_label, p_ITSUF_label, nrow = 1)
 ggsave(p_two_UF, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/NMDS_UF_both.png"), 
-       dpi = 400, width = 150, height = 75, units = "mm")
+       dpi = 400, width = 150, height = 75, units = "mm", scale = 2)
+```
+
+#unweighted UF
+##16S
+
+```{r}
+df_nmds_16S_unUF <- data.frame(metadata, nmds_16S_unUF$nmds$points)
+
+p_16S_UF <- ggplot(data = df_nmds_16S_unUF, 
+                 mapping = aes(x = MDS1, y = MDS2, color = fac_sipop))
+p_16S_UF <- p_16S_UF + theme_classic()
+p_16S_UF <- p_16S_UF + coord_fixed(1)
+p_16S_UF <- p_16S_UF + xlim(-0.27, 0.77) + ylim(-0.52, 0.52)
+p_16S_UF <- p_16S_UF + scale_color_manual(values = col_sipop)
+p_16S_UF <- p_16S_UF + geom_point()
+p_16S_UF <- p_16S_UF + annotate("text", 
+                                x = 0.63, y = -0.5,
+                                label = paste0("stress = ", 
+                                               round(nmds_16S_unUF$nmds$stress, digits = 5)))
+p_16S_UF <- p_16S_UF + theme(legend.position = "none")
+p_16S_UF
+
+ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/NMDS_unweightedUF.png"), 
+       plot = p_16S_UF, dpi = 400, width = 150, height = 150, units = "mm")
+```
+
+##ITS
+
+```{r}
+df_nmds_ITS_unUF <- data.frame(metadata, nmds_ITS_unUF$nmds$points)
+
+p_ITS_UF <- ggplot(data = df_nmds_ITS_unUF, 
+                 mapping = aes(x = MDS1, y = MDS2, color = fac_sipop)) + 
+  theme_classic() + 
+  coord_fixed(1) + 
+  xlim(-0.52, 0.52) + ylim(-0.52, 0.52) +
+  scale_color_manual(values = col_sipop) + 
+  geom_point() + 
+  annotate("text", x = 0.4, y = -0.5,
+           label = paste0("stress = ", 
+                          round(nmds_ITS_unUF$nmds$stress, digits = 5))) + 
+  theme(legend.position = "none")
+p_ITS_UF
+ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/NMDS_unweightedUF.png"),
+       plot = p_ITS_UF, dpi = 400, width = 150, height = 150, units = "mm")
+```
+
+```{r}
+p_16SUF_label <- arrangeGrob(p_16S_UF, top = create_label("a"))
+p_ITSUF_label <- arrangeGrob(p_ITS_UF, top = create_label("b"))
+
+p_two_UF <- grid.arrange(p_16SUF_label, p_ITSUF_label, nrow = 1)
+ggsave(p_two_UF, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/NMDS_unweightedUF_both.png"), 
+       dpi = 400, width = 150, height = 75, units = "mm", scale = 2)
 ```
 

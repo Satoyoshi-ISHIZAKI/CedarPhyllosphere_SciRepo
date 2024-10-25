@@ -13,7 +13,9 @@ library(tidyverse)
 library(vegan)
 library(picante)
 library(glm2)
+library(lawstat)
 library(gridExtra)
+library(grid)
 library(gtable)
 ```
 
@@ -30,6 +32,7 @@ source("../scripts/path.R")
 
 ```{r}
 source("../R/occurrence.R")
+source("../R/label.R")
 ```
 
 #read processed data
@@ -59,6 +62,12 @@ metadata_loc <- left_join(metadata, location, by = "population")
 rownames(metadata_loc) <- formatC(as.numeric(rownames(metadata_loc)), width = 4, flag = "0")
 ```
 
+#phylogenetic distance
+
+```{r}
+phydist <- cophenetic(tree_rarefied2$data)
+```
+
 #alpha-diversity-indices
 
 ```{r}
@@ -67,6 +76,7 @@ metadata_loc$shannon <- diversity(df_rarefied, index = "shannon")
 metadata_loc$simpson <- diversity(df_rarefied, index = "simpson")
 faith <- pd(df_rarefied, tree = tree_rarefied2$data, include.root = TRUE)
 metadata_loc <- cbind(metadata_loc, faith)
+metadata_loc$wmpd <- mpd(df_rarefied, dis = phydist, abundance.weighted = TRUE)
 ```
 
 ##richness
@@ -113,7 +123,18 @@ p_faith <- ggplot(data = metadata_loc,
   xlim(c(30, 41)) + #ylim(0, 300) +
   scale_color_manual(values = c("blue3", "orange3")) +
   labs(x = "Latitude", 
-       y = "Faith's Phylogenetic Diversity", 
+       y = "Faith's PD", 
+       color = "Site") +
+  theme(text = element_text(size = 10))
+
+p_wmpd <- ggplot(data = metadata_loc, 
+                 mapping = aes(x = latitude, y = wmpd)) + 
+  geom_point(mapping = aes(color = site), size = 2) +
+  theme_classic() + 
+  xlim(c(30, 41)) + #ylim(0, 300) +
+  scale_color_manual(values = c("blue3", "orange3")) +
+  labs(x = "Latitude", 
+       y = "WMPD", 
        color = "Site") +
   theme(text = element_text(size = 10))
 
@@ -121,11 +142,19 @@ legend <- gtable_filter(ggplotGrob(p_rich), "guide-box")
 ```
 
 ```{r}
-p_div <- grid.arrange(p_rich + theme(legend.position = "none"), 
-                      p_shannon + theme(legend.position = "none"), 
-                      p_simp + theme(legend.position = "none"), 
-                      p_faith + theme(legend.position = "none"), 
-                      legend, 
+pl_rich <- p_rich + theme(legend.position = "none")
+pl_shannon <- p_shannon + theme(legend.position = "none")
+pl_simp <- p_simp + theme(legend.position = "none")
+pl_faith <- p_faith + theme(legend.position = "none")
+pl_wmpd <- p_wmpd + theme(legend.position = "none")
+
+pl_rich <- arrangeGrob(pl_rich, top = create_label("a"))
+pl_shannon <- arrangeGrob(pl_shannon, top = create_label("b"))
+pl_simp <- arrangeGrob(pl_simp, top = create_label("c"))
+pl_faith <- arrangeGrob(pl_faith, top = create_label("d"))
+pl_wmpd <- arrangeGrob(pl_wmpd, top = create_label("e"))
+
+p_div <- grid.arrange(pl_rich, pl_shannon, pl_simp, pl_faith, pl_wmpd, legend, 
                       nrow = 2, ncol = 3)
 
 ggsave(p_div, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/alpha_16S.png"), 
@@ -146,6 +175,11 @@ write.csv(cbind(summary(lm_rich)$coefficients,
 ```
 
 ```{r}
+levene_shan <- levene.test(metadata_loc$shannon, metadata_loc$site)
+
+write.csv(cbind(W = levene_shan$statistic, p = levene_shan$p.value), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/shannon_levene.csv"))
+
 lm_shan <- glm2(shannon ~ site * latitude, 
                 data = metadata_loc, 
                 family = gaussian)
@@ -168,6 +202,11 @@ write.csv(cbind(summary(lm_simp)$coefficients,
 ```
 
 ```{r}
+levene_faith <- levene.test(metadata_loc$PD, group = metadata_loc$site)
+
+write.csv(cbind(W = levene_faith$statistic, p = levene_faith$p.value), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/faith_levene.csv"))
+
 lm_faith <- glm2(PD ~ site * latitude, 
                  data = metadata_loc, 
                  family = Gamma(link = "inverse"))
@@ -176,5 +215,25 @@ summary(lm_faith)
 write.csv(cbind(summary(lm_faith)$coefficients, 
                 AIC = summary(lm_faith)$aic), 
           file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/faith_glm_gamma.csv"))
+```
+
+```{r}
+#Weighted Mean Phylogenetic Distance
+#There is large difference between the variances of wmpd in Kawatabi and Tsukuba (Levene's test)
+levene_wmpd <- levene.test(metadata_loc$wmpd, metadata_loc$site)
+
+write.csv(cbind(W = levene_wmpd$statistic, p = levene_wmpd$p.value), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/wmpd_levene.csv"))
+
+lm_wmpd <- glm2(wmpd ~ site * latitude, 
+                data = metadata_loc, 
+                family = gaussian)
+summary(lm_wmpd)
+
+
+write.csv(cbind(summary(lm_wmpd)$coefficients, 
+                AIC = summary(lm_wmpd)$aic), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/wmpd_glm_gauss.csv"))
+
 ```
 
