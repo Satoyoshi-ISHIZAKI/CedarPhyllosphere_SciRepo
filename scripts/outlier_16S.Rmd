@@ -32,17 +32,16 @@ source("../R/outlier.R")
 #read processed data
 
 ```{r}
-#change "16S" to "ITS" to rarefy ITS data
-df_rarefied <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/df_rarefied_ITS.csv"), row.names = 1)
+df_rarefied <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/df_rarefied_16S.csv"), row.names = 1)
 rownames(df_rarefied) <- formatC(as.numeric(rownames(df_rarefied)), width = 4, flag = "0") 
 #add 0 to the head of rownames
 
-tax_table <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/tax_table2_ITS.csv"), row.names = 1)
+tax_table <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/tax_table2_16S.csv"), row.names = 1)
 tax_table <- as.matrix(tax_table)
 
-load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/trees.Rdata"))
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/trees.Rdata"))
 
-metadata <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/metadata_2306.xlsx"), 
+metadata <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/metadata_2306.xlsx"), 
                        sheet = "Sheet1")
 metadata <- column_to_rownames(metadata, var = "Sample_Name")
 metadata$cloneID <- as.factor(metadata$cloneID)
@@ -75,7 +74,7 @@ outlier_UFwei <- cbind(outlier_UFwei,
                        pvals = test_UFwei$pvals[which(test_UFwei$pvals < 0.05)])
 show(outlier_UFwei)
 
-write.csv(outlier_UFwei, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/outlier_ITS_weightedUF.csv"))
+write.csv(outlier_UFwei, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/outlier_16S_weightedUF.csv"))
 ```
 
 ##bray
@@ -94,7 +93,7 @@ outlier_bray <- cbind(outlier_bray,
                        pvals = test_bray$pvals[which(test_bray$pvals < 0.05)])
 show(outlier_bray)
 
-write.csv(outlier_bray, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/outlier_ITS_bray.csv"))
+write.csv(outlier_bray, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/outlier_16S_bray.csv"))
 ```
 
 
@@ -108,8 +107,8 @@ metadata_out <- metadata[-charmatch(rownames(outlier_UFwei), rownames(df_rarefie
 dist_UF_out <- UniFrac(phyloseq(otu_table(df_rarefied_out, taxa_are_rows = FALSE), 
                                     phy_tree(tree_rarefied2$data)), weighted = TRUE)
 
-#write.csv(df_rarefied_out, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/exclude/df_rarefied_ITS_out.csv"), row.names = as.character(rownames(df_rarefied_out)))
-#write.csv(metadata_out, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/exclude/metadata_ITS_out.csv"), row.names = as.character(rownames(metadata_out)))
+#write.csv(df_rarefied_out, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/exclude/df_rarefied_16S_out.csv"), row.names = as.character(rownames(df_rarefied_out)))
+#write.csv(metadata_out, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/exclude/metadata_16S_out.csv"), row.names = as.character(rownames(metadata_out)))
 ```
 
 ```{r, cache=TRUE, dependson="dist"}
@@ -119,7 +118,7 @@ nmds_UF_out <- bestNMDS(dist_UF_wei_out)
 ```{r}
 stressplot(nmds_UF_out$nmds)
 nmds_UF_out$nmds$stress
-#save(nmds_UF_out, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/exclude/NMDS_UF_ITS_out.Rdata"))
+#save(nmds_UF_out, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/exclude/NMDS_UF_16S_out.Rdata"))
 ```
 
 ##dataframe to draw a figure
@@ -134,9 +133,9 @@ pop_num <- unlist(lapply(pop_num, function(x) replace_rule[x]))
 #set (site * population) levels
 fac_sipop <- as.factor(paste0(df_nmds$site, LETTERS[pop_num]))
 #assign colors to each element
-col_sipop <- c(alpha("orange3", seq(0.5, 1, 
+col_sipop <- c(alpha("blue3", seq(0.5, 1, 
                                     length.out = nlevels(as.factor(pop_num)))), 
-               alpha("blue", seq(0.5, 1, 
+               alpha("orange3", seq(0.5, 1, 
                                  length.out = nlevels(as.factor(pop_num))))
                )
 ```
@@ -158,6 +157,6 @@ p_nmds <- p_nmds + annotate("text",
 p_nmds <- p_nmds + theme(legend.position = "none", 
                          text = element_text(size = 15, family="sans"))
 p_nmds
-#ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/NMDS_UF_ITS_out_wide.png"), 
+#ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/NMDS_UF_16S_out_wide.png"), 
 #       plot = p_nmds, dpi = 400, width = 150, height = 150, units = "mm")
 ```

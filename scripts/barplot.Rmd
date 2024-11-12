@@ -124,6 +124,7 @@ ps_ITS <- phyloseq(otu_table(otus_ITS_lat, taxa_are_rows = F),
 ##16S
 
 ```{r, cache=TRUE, dependson="barplot"}
+#make plot by yourself!!
 #select highly abundant taxa
 top_16S <- nested_top_taxa(ps_obj = ps_16S, 
                            top_tax_level = "Phylum",
@@ -150,9 +151,9 @@ p_16S_k <- plot_nested_bar(ps_obj = top_16S_k,
         axis.text.x = element_text(),
         axis.ticks.x = element_blank(),
         
-        legend.text = element_markdown(size = 8.5), 
-        legend.key.size = unit(7, "mm"), 
-        legend.margin = margin(t = 0, r = 0, b = 0, l = 0), 
+        legend.text = element_markdown(size = 10), 
+        legend.key.size = unit(6, "mm"), 
+        legend.margin = margin(t = 0.5, r = 0.5, b = 0.5, l = 0.5), 
         legend.position = "inside")
 ```
 
@@ -206,9 +207,9 @@ p_ITS_k <- plot_nested_bar(ps_obj = top_ITS_k,
         axis.text.x = element_text(),
         axis.ticks.x = element_blank(),
         
-        legend.text = element_markdown(size = 8.5), 
-        legend.key.size = unit(7, "mm"), 
-        legend.margin = margin(t = 0, r = 0, b = 0, l = 0),
+        legend.text = element_markdown(size = 10), 
+        legend.key.size = unit(6, "mm"), 
+        legend.margin = margin(t = 0.5, r = 0.5, b = 0.5, l = 0.5), 
         legend.position = "inside")
 ```
 
@@ -253,14 +254,24 @@ pl_ITS_t <- arrangeGrob(pl_ITS_t, top = create_label("d"))
 p_16S <- grid.arrange(pl_16S_k, pl_16S_t, nrow = 1)
 p_ITS <- grid.arrange(pl_ITS_k, pl_ITS_t, nrow = 1)
 
-p_all <- grid.arrange(pl_16S_k, pl_16S_t, legend_16S, pl_ITS_k, pl_ITS_t, legend_ITS, 
-                          nrow = 2, ncol = 3)
+p_all <- grid.arrange(pl_16S_k, pl_16S_t, pl_ITS_k, pl_ITS_t, 
+                          nrow = 2, ncol = 2)
 
 ggsave(plot = p_16S, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_16S.png"), 
        dpi = 400, width = 150, height = 80, units = "mm", scale = 2)
 ggsave(plot = p_ITS, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/barplot_ITS.png"), 
        dpi = 400, width = 150, height = 80, units = "mm", scale = 2)
 ggsave(p_all, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_both.png"), 
-       dpi = 400, width = 150, height = 160, units = "mm", scale = 2)
+       dpi = 400, width = 120, height = 160, units = "mm", scale = 2)
+```
+
+```{r}
+legend <- grid.arrange(legend_16S, legend_ITS, nrow = 2, ncol = 1)
+ggsave(legend_16S, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_legend.png"), 
+       dpi = 400, width = 120, height = 80, units = "mm")
+ggsave(legend_ITS, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/barplot_legend.png"), 
+       dpi = 400, width = 120, height = 80, units = "mm")
+ggsave(legend, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_legend_both.png"), 
+       dpi = 400, width = 120, height = 160, units = "mm")
 ```
 

@@ -1,0 +1,163 @@
+---
+title: "outlier_analysis"
+output: html_document
+date: "2024-10-10"
+---
+
+#load packages
+
+```{r}
+library(readxl)
+library(phyloseq)
+library(tidyverse)
+library(vegan)
+```
+
+#path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+#create "path" file, and define "path" as your raw-data directory(character vector) in the file
+#"path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+#source codes
+
+```{r}
+source("../R/bestNMDS.R")
+source("../R/outlier.R")
+```
+
+#read processed data
+
+```{r}
+#change "16S" to "ITS" to rarefy ITS data
+df_rarefied <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/df_rarefied_ITS.csv"), row.names = 1)
+rownames(df_rarefied) <- formatC(as.numeric(rownames(df_rarefied)), width = 4, flag = "0") 
+#add 0 to the head of rownames
+
+tax_table <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/tax_table2_ITS.csv"), row.names = 1)
+tax_table <- as.matrix(tax_table)
+
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/trees.Rdata"))
+
+metadata <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/metadata_2306.xlsx"), 
+                       sheet = "Sheet1")
+metadata <- column_to_rownames(metadata, var = "Sample_Name")
+metadata$cloneID <- as.factor(metadata$cloneID)
+metadata$population <- as.factor(metadata$population)
+metadata$site <- as.factor(metadata$site)
+metadata$date <- as.factor(metadata$date)
+```
+
+```{r}
+ps <- phyloseq(otu_table(df_rarefied, taxa_are_rows = FALSE), 
+               tax_table(tax_table), 
+               phy_tree(tree_rarefied2$data), 
+               sample_data(metadata))
+```
+
+#outlier_analysis
+##weighted UniFrac
+
+```{r}
+#exclude samples with significantly different fungal community composition, based on weighted UniFrac distances
+#use CLOUD analysis
+#Montassier, E., Al-Ghalith, G.A., Hillmann, B. et al. CLOUD: a non-parametric detection test for microbiome outliers. Microbiome 6, 137 (2018). 
+#https://doi.org/10.1186/s40168-018-0514-4
+dist_UF <- UniFrac(ps, weighted = TRUE)
+
+test_UFwei <- piecewise_kn_V1(dist_UF, test.ix = 1:nrow(df_rarefied), k = 5)
+outlier_UFwei <- metadata[which(test_UFwei$pvals < 0.05), ]
+outlier_UFwei <- cbind(outlier_UFwei, 
+                       stats = test_UFwei$stats[which(test_UFwei$pvals < 0.05)], 
+                       pvals = test_UFwei$pvals[which(test_UFwei$pvals < 0.05)])
+show(outlier_UFwei)
+
+write.csv(outlier_UFwei, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/outlier_ITS_weightedUF.csv"))
+```
+
+##bray
+
+```{r}
+#exclude samples with significantly different fungal community composition, based on weighted UniFrac distances
+#use CLOUD analysis
+#Montassier, E., Al-Ghalith, G.A., Hillmann, B. et al. CLOUD: a non-parametric detection test for microbiome outliers. Microbiome 6, 137 (2018). 
+#https://doi.org/10.1186/s40168-018-0514-4
+dist_bray <- vegdist(df_rarefied, method = "bray")
+
+test_bray <- piecewise_kn_V1(dist_bray, test.ix = 1:nrow(df_rarefied), k = 5)
+outlier_bray <- metadata[which(test_bray$pvals < 0.05), ]
+outlier_bray <- cbind(outlier_bray, 
+                       stats = test_bray$stats[which(test_bray$pvals < 0.05)], 
+                       pvals = test_bray$pvals[which(test_bray$pvals < 0.05)])
+show(outlier_bray)
+
+write.csv(outlier_bray, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/outlier_ITS_bray.csv"))
+```
+
+
+#NMDS_after_exclusion
+
+```{r dist}
+#exclude outliers based on the result of the outlier analysis (using weighted UF distance)
+df_rarefied_out <- df_rarefied[-charmatch(rownames(outlier_UFwei), rownames(df_rarefied)), ]
+metadata_out <- metadata[-charmatch(rownames(outlier_UFwei), rownames(df_rarefied)), ]
+
+dist_UF_out <- UniFrac(phyloseq(otu_table(df_rarefied_out, taxa_are_rows = FALSE), 
+                                    phy_tree(tree_rarefied2$data)), weighted = TRUE)
+
+#write.csv(df_rarefied_out, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/exclude/df_rarefied_ITS_out.csv"), row.names = as.character(rownames(df_rarefied_out)))
+#write.csv(metadata_out, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/exclude/metadata_ITS_out.csv"), row.names = as.character(rownames(metadata_out)))
+```
+
+```{r, cache=TRUE, dependson="dist"}
+nmds_UF_out <- bestNMDS(dist_UF_wei_out)
+```
+
+```{r}
+stressplot(nmds_UF_out$nmds)
+nmds_UF_out$nmds$stress
+#save(nmds_UF_out, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/exclude/NMDS_UF_ITS_out.Rdata"))
+```
+
+##dataframe to draw a figure
+
+```{r}
+df_nmds <- data.frame(metadata_out, nmds_UF_out$nmds$points)
+
+#assign numbers to each population along with its latitude
+replace_rule <- c("AJ"=1, "NB"=2, "YM"=3, "IS"=4, "DN"=5, "BJ"=6, "AS"=7, "OK"=8, "TY"=9, "AZ"=10, "SM"=11, "KW"=12, "SN"=13, "YK"=14) 
+pop_num <- as.character(df_nmds$population)
+pop_num <- unlist(lapply(pop_num, function(x) replace_rule[x]))
+#set (site * population) levels
+fac_sipop <- as.factor(paste0(df_nmds$site, LETTERS[pop_num]))
+#assign colors to each element
+col_sipop <- c(alpha("blue3", seq(0.5, 1, 
+                                    length.out = nlevels(as.factor(pop_num)))), 
+               alpha("orange3", seq(0.5, 1, 
+                                 length.out = nlevels(as.factor(pop_num))))
+               )
+```
+
+
+```{r}
+p_nmds <- ggplot(data = df_nmds, 
+                 mapping = aes(x = MDS1, y = MDS2, color = fac_sipop))
+p_nmds <- p_nmds + theme_classic()
+p_nmds <- p_nmds + coord_fixed(1)
+p_nmds <- p_nmds + xlim(-0.06, 0.03) + ylim(-0.04, 0.04)
+p_nmds <- p_nmds + scale_color_manual(values = col_sipop)
+p_nmds <- p_nmds + geom_text(aes(label = names(pop_num)), 
+                             size = 5)
+p_nmds <- p_nmds + annotate("text", 
+                            x = 0.01, y = -0.035, size = 6, 
+                            label = paste0("stress = ", 
+                                           round(nmds_UF_out$nmds$stress, digits = 4)))
+p_nmds <- p_nmds + theme(legend.position = "none", 
+                         text = element_text(size = 15, family="sans"))
+p_nmds
+#ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/NMDS_UF_ITS_out_wide.png"), 
+#       plot = p_nmds, dpi = 400, width = 150, height = 150, units = "mm")
+```

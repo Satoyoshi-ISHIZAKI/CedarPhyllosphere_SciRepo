@@ -147,6 +147,7 @@ pop_num <- unlist(lapply(pop_num, function(x) replace_rule[x]))
 #set (site * population) levels
 fac_sipop <- as.factor(paste0(metadata$site, LETTERS[pop_num]))
 #assign colors to each element
+#decrease transparency with increasing latitude
 col_sipop <- c(alpha("blue", seq(0.2, 1, length.out = length(replace_rule))), 
                alpha("orange3", seq(0.2, 1, length.out = length(replace_rule)))
                )

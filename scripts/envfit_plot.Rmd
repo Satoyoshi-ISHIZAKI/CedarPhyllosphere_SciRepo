@@ -157,6 +157,8 @@ score_ITS <- data.frame(score_ITS,
 score_ITS$arr_col[score_ITS$p < 0.05] <- "black"
 
 signif_ITS <- score_ITS[score_ITS$p < 0.05, ]
+rownames(signif_ITS) <- "β-Farnesene"
+signif_ITS$rowname <- "β-Farnesene"
 ```
 
 
@@ -266,7 +268,7 @@ p_ITS <- ggplot(df_nmds_ITS, mapping = aes(x = MDS1, y = MDS2)) +
                aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
                arrow = arrow(length = unit(2.5, "mm")), 
                color = "purple3") +
-  geom_text(data = signif_ITS,  
+  geom_text(data = signif_ITS, 
             aes(x = NMDS1 + 0.15, y = NMDS2 - 0.15, label = rowname), 
             color = "purple3") +
   

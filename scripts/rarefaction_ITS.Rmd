@@ -1,0 +1,65 @@
+---
+title: "rarefaction"
+output: html_document
+date: "2024-10-10"
+---
+
+#load packages
+
+```{r}
+library(tidyverse)
+library(vegan)
+```
+
+#path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+#create "path" file, and define "path" as your raw-data directory(character vector) in the file
+#"path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+#read processed data
+
+```{r}
+otus_data <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/otus_data_ITS.csv"), row.names = 1)
+rownames(otus_data) <- formatC(as.numeric(rownames(otus_data)), width = 4, flag = "0") #add 0 to rownames
+
+tax_table <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/tax_table_ITS.csv"), row.names = 1)
+```
+
+# rarefaction
+
+```{r, cache=TRUE, dependson="import"}
+set.seed(123)
+rarecurve(otus_data, 
+          step = 1000, 
+          label = FALSE)
+abline(v = min(rowSums(otus_data)), col = "red") #最小read
+```
+
+```{r rarefaction, cache=TRUE, dependson="tax_table"}
+set.seed(234)
+readmin <- min(rowSums(otus_data))
+otus_rarefied <- rrarefy(otus_data, 
+                         readmin)
+df_rarefied <- data.frame(otus_rarefied)
+df_rarefied[, 1:6]
+```
+
+```{r}
+#ASVs remained after rarefaction
+rarefied_ASV <- colnames(df_rarefied[, apply(df_rarefied, 2, sum) > 0])
+rarefied_feature <- rownames(tax_table[charmatch(rarefied_ASV, tax_table[, 9]), ])
+rarefied_feature <- data.frame(featureID = rarefied_feature)
+```
+
+#output
+
+```{r}
+write.csv(df_rarefied, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/df_rarefied_ITS.csv"))
+
+#write_tsv(rarefied_feature, paste0(path, "/Analysis/NoContam/hash_ITS_rarefied.tsv"))
+```
+

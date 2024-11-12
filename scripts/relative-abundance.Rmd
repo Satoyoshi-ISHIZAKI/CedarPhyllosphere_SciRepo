@@ -1,0 +1,128 @@
+---
+title: "barplot"
+output: html_document
+date: "2024-10-10"
+---
+
+#load packages
+
+```{r}
+library(readxl)
+library(tidyverse)
+library(phyloseq)
+library(fantaxtic)
+```
+
+#path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+#create "path" file, and define "path" as your raw-data directory(character vector) in the file
+#"path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+#source codes
+```{r}
+#source("../R/label.R")
+```
+
+#read processed data
+##16S
+
+```{r import}
+otus_16S <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/otus_data_16S.csv"), row.names = 1)
+rownames(otus_16S) <- formatC(as.numeric(rownames(otus_16S)), width = 4, flag = "0") #add 0 to rownames
+
+#tax_table
+tax_16S <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/tax_table2_16S.csv"), row.names = 1)
+tax_16S <- as.matrix(tax_16S)
+
+#phylogenetic tree
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/trees.Rdata"))
+tree16S <- tree2
+tree16S_rarefied <- tree_rarefied2
+rm(list = c("tree2", "tree_rarefied2"))
+
+#metadata
+metadata <- read_excel(paste0(path_out, "/data/Sugi/metadata_2306.xlsx"), sheet = "Sheet1")
+metadata <- column_to_rownames(metadata, var = "Sample_Name")
+metadata$cloneID <- as.factor(metadata$cloneID)
+metadata$population <- as.factor(metadata$population)
+metadata$site <- as.factor(metadata$site)
+metadata$date <- as.factor(metadata$date)
+```
+
+##ITS
+
+```{r}
+otus_ITS <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/otus_data_ITS.csv"), row.names = 1)
+rownames(otus_ITS) <- formatC(as.numeric(rownames(otus_ITS)), width = 4, flag = "0") #add 0 to rownames
+
+#tax_table
+tax_ITS <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/tax_table2_ITS.csv"), row.names = 1)
+tax_ITS <- as.matrix(tax_ITS)
+
+#phylogenetic tree
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/trees.Rdata"))
+treeITS <- tree2
+treeITS_rarefied <- tree_rarefied2
+rm(list = c("tree2", "tree_rarefied2"))
+```
+
+
+```{r}
+# add clone_ID to rownames (why needed?)
+rownames(otus_16S) <- paste0(rownames(metadata), "_", metadata$population)
+rownames(otus_ITS) <- paste0(rownames(metadata), "_", metadata$population)
+rownames(metadata) <- paste0(rownames(metadata), "_", metadata$population)
+```
+
+#arrange data
+
+```{r}
+#sort metadata in decreacing order accordance with latitude
+meta_lat <- metadata %>%
+  arrange(latitude) %>%
+  arrange(site)
+
+otus_16S_lat <- otus_16S[rownames(meta_lat), ]
+otus_ITS_lat <- otus_ITS[rownames(meta_lat), ]
+
+#make xlabel vector (population name of samples at center position within samples with the same population)
+site_pop <- as.factor(paste0(meta_lat$site, "_", meta_lat$population))
+sitepop_row <- sapply(levels(site_pop), grep, site_pop)
+vline <- sapply(sitepop_row, min)
+sitepop_row <- sapply(sitepop_row, median)
+sitepop_row <- sapply(sitepop_row, floor)
+
+meta_lat$xlab <- rep("", nrow(meta_lat))
+meta_lat$xlab[sitepop_row] <- as.character(meta_lat$population[sitepop_row])
+
+vline = data.frame("line" = vline - 0.5)
+```
+
+#phyloseq_object
+
+```{r barplot}
+ps_16S <- phyloseq(otu_table(otus_16S_lat, taxa_are_rows = F), 
+                 tax_table(tax_16S), 
+                 phy_tree(tree16S$data), 
+                 sample_data(meta_lat)) #change row indices to choose samples included in barplots
+ps_ITS <- phyloseq(otu_table(otus_ITS_lat, taxa_are_rows = F), 
+                 tax_table(tax_ITS), 
+                 phy_tree(treeITS$data), 
+                 sample_data(meta_lat))
+```
+
+```{r}
+ps_16S@otu_table <- ps_16S@otu_table / rowSums(ps_16S@otu_table)
+ps_ITS@otu_table <- ps_ITS@otu_table / rowSums(ps_ITS@otu_table)
+```
+
+```{r}
+top_16S <- top_taxa(ps_16S, tax_level = "Phylum", n_taxa = 10)
+top_ITS <- top_taxa(ps_ITS, tax_level = "Class", n_taxa = 10)
+
+```
+

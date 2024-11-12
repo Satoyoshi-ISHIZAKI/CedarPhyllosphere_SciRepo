@@ -129,6 +129,16 @@ model_bray_16S
 
 #write.csv(model_bray_16S, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/PERMANOVA_bray.csv"))
 ```
+```{r}
+set.seed(175)
+model_bray_16S <- adonis2(dist_bray_16S ~ site *latitude, 
+                      data = metadata, 
+                      perm = 999, 
+                      by = "terms")
+model_bray_16S
+
+write.csv(model_bray_16S, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/PERMANOVA_bray_lat.csv"))
+```
 
 ```{r}
 set.seed(456)
@@ -155,6 +165,17 @@ model_bray_ITS <- adonis2(dist_bray_ITS ~ site * population,
 model_bray_ITS
 
 #write.csv(model_bray_ITS, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/PERMANOVA_bray.csv"))
+```
+
+```{r}
+set.seed(175)
+model_bray_ITS <- adonis2(dist_bray_ITS ~ site * latitude, 
+                      data = metadata, 
+                      perm = 999, 
+                      by = "terms")
+model_bray_ITS
+
+write.csv(model_bray_ITS, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/PERMANOVA_bray_lat.csv"))
 ```
 
 ##UniFrac
@@ -225,7 +246,7 @@ write.csv(model_unUF_ITS, file = paste0(path_out, "/231202_Sugi_phyllosphere_Jun
 
 #Thus, the differences of dispersion among groups should be tested
 disp_bray_16S <- betadisper(dist_bray_16S, 
-                        metadata$site, 
+                        metadata$latitude, 
                         type = "centroid")
 disp_bray_16S
 

@@ -11,8 +11,13 @@ library(readxl)
 library(phyloseq)
 library(tidyverse)
 library(vegan)
+library(glm2)
 library(ggfortify)
 library(RColorBrewer)
+library(scales)
+library(gridExtra)
+library(grid)
+library(gtable)
 ```
 
 #path to raw-data directory (change "path" to your raw-data directory)
@@ -27,13 +32,12 @@ source("../scripts/path.R")
 #source codes
 
 ```{r}
-#source("../R/")
+source("../R/label.R")
 ```
 
 #read processed data
 
 ```{r import}
-#change 16S to ITS to analyze ITS data
 metadata <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/metadata_16S_BVOC.csv"), row.names = 1)
 rownames(metadata) <- formatC(as.numeric(rownames(metadata)), width = 4, flag = "0")
 
@@ -42,7 +46,54 @@ metadata$population <- as.factor(metadata$population)
 metadata$site <- as.factor(metadata$site)
 metadata$date <- as.factor(metadata$date)
 
+#population metadata
+
+meta_pop <- read_excel(paste0(path_out, "/data/Sugi/metadata_2306.xlsx"), 
+                       sheet = "location")
+
+#log-transformed BVOC emission data
 load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/BVOC_2306_16S_log.Rdata"))
+```
+
+#Barplot of basal emission rate
+
+```{r}
+BVOC_2306 <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/BVOC_summary_240122.xlsx"), 
+                       sheet = "2306_KAWATABI")
+BVOC_2306 <- column_to_rownames(BVOC_2306, var = "samplename")
+
+
+#gather the emission data before plotting
+BVOC_2306_ga <- rownames_to_column(BVOC_2306, var = "ID")
+BVOC_2306_ga <- cbind(population = metadata$population, BVOC_2306_ga)
+BVOC_2306_ga <- gather(BVOC_2306_ga, "BVOC", "emission", c(-ID, -population))
+
+#assign colors to each terpene
+col_BVOC <- c(colorRampPalette(c("green2", "grey30", "yellow2"))(12), 
+              "purple3", "blue3")
+
+#draw barplot
+p_BVOC <- ggplot(data = BVOC_2306_ga, mapping = aes(x = ID, y = emission, 
+                                                    fill = factor(BVOC, 
+                                                                  levels = colnames(BVOC_2306))))
+p_BVOC <- p_BVOC + geom_bar(stat = "identity")
+p_BVOC <- p_BVOC + theme_classic()
+p_BVOC <- p_BVOC + scale_fill_manual(values = col_BVOC)
+p_BVOC <- p_BVOC + scale_y_continuous(labels = label_comma())
+p_BVOC <- p_BVOC + facet_wrap(~ population, scales = "free_x")
+p_BVOC <- p_BVOC + labs(fill = "Terpenes")
+p_BVOC <- p_BVOC + 
+  ylab(expression(paste("Basal Emission Rate (ng ", {gdw^-1}, " ", {h^-1}, ")")))
+p_BVOC <- p_BVOC + theme(axis.title.x = element_blank(), 
+                         axis.text.x = element_blank(), 
+                         axis.ticks.x = element_blank(), 
+                         
+                         legend.key.size = unit(3, "mm"), 
+                         legend.text = element_text(size = 10.5))
+show(p_BVOC)
+
+ggsave(plot = p_BVOC, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_BVOC.png"), 
+       dpi = 400, width = 150, height = 80, units = "mm")
 ```
 
 #pca
@@ -54,7 +105,7 @@ pca_BVOC_log_rm <- prcomp(BVOC_2306_log[, -c(14)],
                           scale. = TRUE)
 summary(pca_BVOC_log_rm)
 
-save(pca_BVOC_log_rm, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/pca_BVOC_2306_16S_log.Rdata"))
+#save(pca_BVOC_log_rm, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/pca_BVOC_2306_16S_log.Rdata"))
 ```
 
 ```{r}
@@ -66,30 +117,91 @@ p_pca <- autoplot(pca_BVOC_log_rm,
                                population = metadata$population), 
                   x = 1, y = 2,
                   color = "population", 
-                  size = 1.3, 
+                  size = 2.5, 
                   loadings = TRUE, 
                   loadings.color = "grey", 
                   loadings.label = TRUE, 
                   loadings.label.color = col_BVOC[-c(14)], 
-                  loadings.label.size = 2.3) + 
+                  loadings.label.size = 4) + 
   coord_fixed(ratio = 1) + 
   theme_classic() + 
   labs(color = "Population") + 
-  scale_color_manual(values = col_pop, labels = c("Ajigazawa", "Azouji", "Yakushima")) +
-  theme(axis.title.x = element_text(size = 7), 
-        axis.text.x = element_text(size = 5), 
-        
-        axis.title.y = element_text(size = 7), 
-        axis.text.y = element_text(size = 5), 
-        
-        axis.line = element_line(linewidth = 0.4), 
-        legend.title = element_text(size = 8), 
-        legend.text = element_text(size = 7), 
-        legend.key.size = unit(2, "mm"))
+  scale_color_manual(values = col_pop, labels = c("Ajigazawa", "Azouji", "Yakushima")) + 
+  theme(legend.title = element_text(size = 13), 
+        legend.text = element_text(size = 10))
 
 show(p_pca)
 
 ggsave(plot = p_pca, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/pca_BVOC_log.png"), 
-       dpi = 400, width = 75, height = 75, units = "mm")
+       dpi = 400, width = 150, height = 150, units = "mm")
+```
+
+#merge plot
+
+```{r}
+p_pca_none <- p_pca + theme(legend.position = "inside")
+legend <- gtable_filter(ggplotGrob(p_pca_none), "guide-box")
+p_pca_none <- p_pca_none + theme(legend.position = "none")
+
+pl_BVOC <- arrangeGrob(p_BVOC, top = create_label("a"))
+pl_pca <- arrangeGrob(p_pca_none, top = create_label("b"))
+
+layout <- rbind(c(1, 2), c(1, 3))
+
+p_merge <- grid.arrange(pl_BVOC, pl_pca, legend, 
+                        layout_matrix = layout, 
+                        widths = c(3, 2), 
+                        heights = c(2, 1)
+                        )
+
+ggsave(plot = p_merge, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_BVOC_pca.png"), 
+       dpi = 400, width = 150, height = 80, units = "mm", scale = 2)
+```
+
+#LM (to test the correlations between latitude and BVOCs emission rates)
+
+```{r}
+#to test the differences of PC1, 2 among groups, perform ANOVA test
+#merge metadata and the result of PCA
+data_pca <- rownames_to_column(data.frame(pca_BVOC_log_rm$x))
+data_pca <- merge(metadata, data_pca, by.x = "samplename", by.y = "rowname")
+
+#merge log-transformed total basal emission rate
+df_total <- data.frame(total = BVOC_2306_total_log)
+df_total <- rownames_to_column(df_total)
+data_pca <- merge(data_pca, df_total, by.x = "samplename", by.y = "rowname")
+
+#merge population metadata
+data_pca <- merge(data_pca, meta_pop, by.x = "population", by.y = "population", all.x = TRUE)
+
+#merge BVOCs emission profile
+df_BVOC <- rownames_to_column(BVOC_2306_log)
+data_pca <- merge(data_pca, df_BVOC, by.x = "samplename", by.y = "rowname")
+
+model_pc1 <- lm(PC1 ~ latitude, data = data_pca)
+model_pc2 <- lm2(PC2 ~ latitude, data = data_pca)
+model_pc3 <- lm(PC3 ~ latitude, data = data_pca)
+model_total <- lm(total ~ latitude, data = data_pca)
+
+summary(model_pc1)
+summary(model_pc2)
+summary(model_pc3)
+summary(model_total)
+
+write.csv(cbind(summary(model_pc1)$coefficients, 
+                AIC = summary(model_pc1)$aic), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_pc1_lm.csv"))
+
+write.csv(cbind(summary(model_pc2)$coefficients, 
+                AIC = summary(model_pc2)$aic), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_pc2_lm.csv"))
+
+write.csv(cbind(summary(model_pc3)$coefficients, 
+                AIC = summary(model_pc3)$aic), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_pc3_lm.csv"))
+
+write.csv(cbind(summary(model_total)$coefficients, 
+                AIC = summary(model_total)$aic), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_total_lm.csv"))
 ```
 
