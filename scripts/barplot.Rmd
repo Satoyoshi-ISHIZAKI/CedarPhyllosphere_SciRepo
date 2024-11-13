@@ -8,9 +8,9 @@ date: "2024-10-10"
 
 ```{r}
 library(readxl)
-library(tidyverse)
 library(phyloseq)
 library(fantaxtic)
+library(tidyverse)
 library(ggnested)
 library(ggtext)
 library(gridExtra)
@@ -30,6 +30,7 @@ source("../scripts/path.R")
 #source codes
 ```{r}
 source("../R/label.R")
+source("../R/top_nest.R")
 ```
 
 #read processed data
@@ -126,12 +127,11 @@ ps_ITS <- phyloseq(otu_table(otus_ITS_lat, taxa_are_rows = F),
 ```{r, cache=TRUE, dependson="barplot"}
 #make plot by yourself!!
 #select highly abundant taxa
-top_16S <- nested_top_taxa(ps_obj = ps_16S, 
-                           top_tax_level = "Phylum",
-                           n_top_taxa = 2,
-                           nested_tax_level = "Genus", 
-                           n_nested_taxa = 4, 
-                           grouping = "site")
+top_16S <- top_nest(ps_obj = ps_16S, 
+                    tax_level = "Genus", 
+                    top_level = "Phylum", 
+                    n = 5, 
+                    grouping = "site")
 ```
 
 ###kawatabi
@@ -140,8 +140,8 @@ top_16S <- nested_top_taxa(ps_obj = ps_16S,
 top_16S_k <- subset_samples(top_16S$ps_obj, site == "Kawatabi")
 
 p_16S_k <- plot_nested_bar(ps_obj = top_16S_k, 
-                         top_level = "Phylum", 
-                         nested_level = "Genus") +
+                           top_level = "Phylum", 
+                           nested_level = "Genus") +
   theme_classic() +
   scale_x_discrete(labels = meta_lat[meta_lat$site == "Kawatabi", "xlab"]) +
   geom_vline(xintercept = vline[1:14, "line"], 
@@ -152,8 +152,8 @@ p_16S_k <- plot_nested_bar(ps_obj = top_16S_k,
         axis.ticks.x = element_blank(),
         
         legend.text = element_markdown(size = 10), 
-        legend.key.size = unit(6, "mm"), 
-        legend.margin = margin(t = 0.5, r = 0.5, b = 0.5, l = 0.5), 
+        legend.key.size = unit(7, "mm"), 
+        legend.spacing.x = unit(5, "mm"), 
         legend.position = "inside")
 ```
 
@@ -175,19 +175,19 @@ p_16S_t <- plot_nested_bar(ps_obj = top_16S_t,
         axis.ticks.x = element_blank(),
         
         legend.text = element_markdown(), 
-        legend.key.size = unit(5, "mm"), 
+        legend.key.size = unit(7, "mm"), 
         legend.position = "inside")
 ```
 
 ##ITS
 
 ```{r}
-top_ITS <- nested_top_taxa(ps_obj = ps_ITS, 
-                           top_tax_level = "Class",
-                           n_top_taxa = 3,
-                           nested_tax_level = "Genus", 
-                           n_nested_taxa = 3,
-                           grouping = "site")
+top_ITS <- top_nest(ps_obj = ps_ITS, 
+                    tax_level = "Family", 
+                    top_level =  "Class", 
+                    n = 6, 
+                    grouping = "site"
+                    )
 ```
 
 ###kawatabi
@@ -197,7 +197,7 @@ top_ITS_k <- subset_samples(top_ITS$ps_obj, site == "Kawatabi")
 
 p_ITS_k <- plot_nested_bar(ps_obj = top_ITS_k, 
                       top_level = "Class", 
-                      nested_level = "Genus") +
+                      nested_level = "Family") +
   theme_classic() +
   scale_x_discrete(labels = meta_lat[meta_lat$site == "Kawatabi", "xlab"]) +
   geom_vline(xintercept = vline[1:14, "line"], 
@@ -208,8 +208,8 @@ p_ITS_k <- plot_nested_bar(ps_obj = top_ITS_k,
         axis.ticks.x = element_blank(),
         
         legend.text = element_markdown(size = 10), 
-        legend.key.size = unit(6, "mm"), 
-        legend.margin = margin(t = 0.5, r = 0.5, b = 0.5, l = 0.5), 
+        legend.key.size = unit(7, "mm"), 
+        legend.spacing.x = unit(5, "mm"), 
         legend.position = "inside")
 ```
 
@@ -220,7 +220,7 @@ top_ITS_t <- subset_samples(top_ITS$ps_obj, site == "Tsukuba")
 
 p_ITS_t <- plot_nested_bar(ps_obj = top_ITS_t, 
                       top_level = "Class", 
-                      nested_level = "Genus") +
+                      nested_level = "Family") +
   theme_classic() +
   scale_x_discrete(labels = meta_lat[meta_lat$site == "Tsukuba", "xlab"]) +
   geom_vline(xintercept = vline[15:28, "line"]-58, 
@@ -231,7 +231,7 @@ p_ITS_t <- plot_nested_bar(ps_obj = top_ITS_t,
         axis.ticks.x = element_blank(),
         
         legend.text = element_markdown(), 
-        legend.key.size = unit(5, "mm"), 
+        legend.key.size = unit(7, "mm"), 
         legend.position = "inside")
 ```
 
@@ -254,24 +254,24 @@ pl_ITS_t <- arrangeGrob(pl_ITS_t, top = create_label("d"))
 p_16S <- grid.arrange(pl_16S_k, pl_16S_t, nrow = 1)
 p_ITS <- grid.arrange(pl_ITS_k, pl_ITS_t, nrow = 1)
 
-p_all <- grid.arrange(pl_16S_k, pl_16S_t, pl_ITS_k, pl_ITS_t, 
-                          nrow = 2, ncol = 2)
+p_all <- grid.arrange(pl_16S_k, pl_16S_t, legend_16S, pl_ITS_k, pl_ITS_t, legend_ITS,
+                      ncol = 3, nrow = 2, widths = c(1, 1, 0.5))
 
 ggsave(plot = p_16S, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_16S.png"), 
        dpi = 400, width = 150, height = 80, units = "mm", scale = 2)
 ggsave(plot = p_ITS, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/barplot_ITS.png"), 
        dpi = 400, width = 150, height = 80, units = "mm", scale = 2)
 ggsave(p_all, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_both.png"), 
-       dpi = 400, width = 120, height = 160, units = "mm", scale = 2)
+       dpi = 400, width = 150, height = 160, units = "mm", scale = 2.5)
 ```
 
 ```{r}
-legend <- grid.arrange(legend_16S, legend_ITS, nrow = 2, ncol = 1)
+legend <- grid.arrange(legend_16S, legend_ITS, nrow = 1, ncol = 2)
 ggsave(legend_16S, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_legend.png"), 
        dpi = 400, width = 120, height = 80, units = "mm")
 ggsave(legend_ITS, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/barplot_legend.png"), 
        dpi = 400, width = 120, height = 80, units = "mm")
 ggsave(legend, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_legend_both.png"), 
-       dpi = 400, width = 120, height = 160, units = "mm")
+       dpi = 400, width = 150, height = 160, units = "mm")
 ```
 
