@@ -1,0 +1,179 @@
+---
+title: "climate-data"
+output: html_document
+date: "2024-11-18"
+---
+
+#load packages
+
+```{r}
+library(readxl)
+library(tidyverse)
+library(ggfortify)
+library(terra)
+library(sf)
+library(gridExtra)
+library(grid)
+library(gtable)
+```
+
+#path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+#create "path" file, and define "path" as your raw-data directory(character vector) in the file
+#"path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+#source codes
+
+```{r}
+source("../R/label.R")
+```
+
+#read processed data
+
+```{r import}
+#metadata
+metadata <- read_excel(paste0(path_out, "/data/Sugi/metadata_2306.xlsx"), sheet = "Sheet1")
+metadata <- column_to_rownames(metadata, var = "Sample_Name")
+metadata$cloneID <- as.factor(metadata$cloneID)
+metadata$population <- as.factor(metadata$population)
+metadata$site <- as.factor(metadata$site)
+metadata$date <- as.factor(metadata$date)
+
+#metadata for populations
+meta_pop <- read_excel(paste0(path_out, "/data/Sugi/metadata_2306.xlsx"), sheet = "location")
+meta_pop <- meta_pop[, 1:5]
+meta_pop$fullname <- as.factor(meta_pop$fullname)
+meta_pop$population <- as.factor(meta_pop$population)
+
+#global climatic data from CHELSA database
+raster_files <- list.files(paste0(path_out, "/data/Sugi"), pattern = "\\.tif$", full.names = TRUE)
+rasters <- lapply(raster_files, rast)
+variables <- sapply(strsplit(raster_files, "_"), `[`, 2)
+variables[variables == "pr"] <- paste0(variables[variables == "pr"], sapply(strsplit(raster_files, "_"), `[`, 3)[variables == "pr"])
+variables[variables == "tas"] <- paste0(variables[variables == "tas"], sapply(strsplit(raster_files, "_"), `[`, 3)[variables == "tas"])
+
+names(rasters) <- variables
+
+#replace names of bio(i) with meaningful names
+repl <- c("bio1" = "mat", "bio4" = "sdmmt", 
+          "bio12" = "apr", "bio15" = "cvmpr")
+names(rasters)[sapply(names(repl), charmatch, names(rasters))] <- repl
+```
+
+#extract climate data
+
+```{r}
+# Convert population metadata to an sf object (assumes 'latitude' and 'longitude' exist)
+pop_sf <- st_as_sf(meta_pop, coords = c("longitude", "latitude"), crs = 4326)
+
+# Extract climate data
+extracted_values <- sapply(rasters, function(r) terra::extract(r, pop_sf)[, 2])
+
+# Combine with original location data
+pop_clim <- cbind(meta_pop, extracted_values)
+```
+
+#calc snow amount
+
+```{r}
+#calculate monthly mean snow amount
+pop_clim$snow01 <- pop_clim$pr01
+pop_clim$snow01[pop_clim$tas01 > 0] <- 0
+pop_clim$snow02 <- pop_clim$pr02
+pop_clim$snow02[pop_clim$tas02 > 0] <- 0
+pop_clim$snow12 <- pop_clim$pr12
+pop_clim$snow12[pop_clim$tas12 > 0] <- 0
+
+pop_clim$sub0pr <- apply(pop_clim[, grep("snow", colnames(pop_clim))], 1, sum)
+
+pca_df <- pop_clim[, -c(grep("pr\\d+", colnames(pop_clim)), 
+                        grep("tas\\d+", colnames(pop_clim)), 
+                        grep("snow\\d+", colnames(pop_clim)))]
+```
+
+#pca
+
+```{r}
+pca_clim <- prcomp(pca_df[, -c(1:5)], scale. = TRUE)
+
+summary(pca_clim)
+```
+
+```{r}
+p_pca <- autoplot(pca_clim, 
+                  data = pop_clim, 
+                  x = 1, y = 2,
+                  shape = FALSE, 
+                  label = TRUE, 
+                  label.label = "population", 
+                  color = "latitude", 
+                  size = 2.5, 
+                  loadings = TRUE, 
+                  loadings.color = "grey", 
+                  loadings.label = TRUE, 
+                  loadings.label.size = 4) + 
+  coord_fixed(ratio = 1) + 
+  theme_classic() + 
+  labs(color = "Latitude") + 
+  theme(legend.title = element_text(size = 13), 
+        legend.text = element_text(size = 10))
+
+show(p_pca)
+```
+
+```{r}
+p_pca2 <- autoplot(pca_clim, 
+                  data = pop_clim, 
+                  x = 2, y = 3,
+                  shape = FALSE, 
+                  label = TRUE, 
+                  label.label = "population", 
+                  color = "latitude", 
+                  size = 2.5, 
+                  loadings = TRUE, 
+                  loadings.color = "grey", 
+                  loadings.label = TRUE, 
+                  loadings.label.size = 4) + 
+  coord_fixed(ratio = 1) + 
+  theme_classic() + 
+  labs(color = "Latitude") + 
+  theme(legend.title = element_text(size = 13), 
+        legend.text = element_text(size = 10))
+
+show(p_pca2)
+```
+
+#save
+
+```{r}
+# Save the results
+pl_pca <- p_pca + theme(legend.position = "none")
+pl_pca2 <- p_pca2 + theme(legend.position = "none")
+pl_pca <- arrangeGrob(pl_pca, top = create_label("a"))
+pl_pca2 <- arrangeGrob(pl_pca2, top = create_label("b"))
+legend <- gtable_filter(ggplotGrob(p_pca), "guide-box")
+
+p_all <- grid.arrange(pl_pca, pl_pca2, legend, 
+                      nrow = 1, widths = c(1, 1, 0.25))
+
+ggsave(plot = p_all, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/pca_climate.png"), 
+       dpi = 400, width = 150, height = 75, units = "mm", scale = 9/4)
+ggsave(plot = p_pca, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/pca_climate12.png"), 
+       dpi = 400, width = 150, height = 150, units = "mm")
+```
+
+```{r}
+#save data
+pcs <- pca_clim$x
+colnames(pcs) <- paste0(colnames(pcs), "_clim")
+meta_pop <- cbind(pca_df, pcs)
+
+write.csv(pca_df, paste0(path_out, "/data/Sugi/pop_climate_CHELSA.csv"), row.names = FALSE)
+save(pca_clim, file = paste0(path_out, "/data/Sugi/pca_climate.Rdata"))
+write.csv(meta_pop, file = paste0(path_out, "/data/Sugi/pop_climate_pca.csv"))
+```
+

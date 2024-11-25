@@ -12,6 +12,8 @@ library(phyloseq)
 library(tidyverse)
 library(vegan)
 library(RColorBrewer)
+library(gridExtra)
+library(gtable)
 ```
 
 #path to raw-data directory (change "path" to your raw-data directory)

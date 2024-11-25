@@ -1,0 +1,221 @@
+---
+title: "Genetic-Distance"
+output: html_document
+date: "2024-10-10"
+---
+
+#load packages
+
+```{r}
+library(readxl)
+library(phyloseq)
+library(tidyverse)
+library(vegan)
+```
+
+#path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+#create "path" file, and define "path" as your raw-data directory(character vector) in the file
+#"path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+#source codes
+
+```{r}
+#source("../R/bestNMDS.R")
+```
+
+#read processed data
+##16S
+
+```{r import}
+#rarefied_ASV_table
+df_16S <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/df_rarefied_16S.csv"), row.names = 1)
+rownames(df_16S) <- formatC(as.numeric(rownames(df_16S)), width = 4, flag = "0") #add 0 to rownames
+
+#tax_table
+tax_16S <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/tax_table2_16S.csv"), row.names = 1)
+tax_16S <- as.matrix(tax_16S)
+
+#phylogenetic tree
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/trees.Rdata"))
+tree16S <- tree2
+tree16S_rarefied <- tree_rarefied2
+rm(list = c("tree2", "tree_rarefied2"))
+
+#metadata
+metadata <- read_excel(paste0(path_out, "/data/Sugi/metadata_2306.xlsx"), sheet = "Sheet1")
+metadata <- column_to_rownames(metadata, var = "Sample_Name")
+metadata$cloneID <- as.factor(metadata$cloneID)
+metadata$population <- as.factor(metadata$population)
+metadata$site <- as.factor(metadata$site)
+metadata$date <- as.factor(metadata$date)
+
+#make num_gen column to be matched with the names for genetic distance data samples
+#extract samples which have both microbiome data and genetic distance data
+metadata$num_gen <- metadata$fullname
+metadata$num_gen[grep("Tateyama", metadata$num_gen)] <- "Bijodaira"
+metadata$num_gen[grep("Sado", metadata$num_gen)] <- "Donden"
+
+#change names of samples from Yakushima pop to subpop names
+subpop <- sapply(str_split(metadata$cloneID, "_"), `[`, 1)
+metadata$num_gen[grep("ST", subpop)] <- "Shiratani"
+metadata$num_gen[grep("LD", subpop)] <- "Land"
+metadata$num_gen[grep("HN_013", metadata$cloneID)] <- "Hanayama"
+
+metadata$num_gen <- paste0(metadata$num_gen, sapply(str_split(metadata$cloneID, "_"), `[`, 2))
+```
+
+##ITS
+
+```{r}
+#rarefied_ASV_table
+df_ITS <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/df_rarefied_ITS.csv"), row.names = 1)
+rownames(df_ITS) <- formatC(as.numeric(rownames(df_ITS)), width = 4, flag = "0") #add 0 to rownames
+
+#tax_table
+tax_ITS <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/tax_table2_ITS.csv"), row.names = 1)
+tax_ITS <- as.matrix(tax_ITS)
+
+#phylogenetic tree
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/trees.Rdata"))
+treeITS <- tree2
+treeITS_rarefied <- tree_rarefied2
+rm(list = c("tree2", "tree_rarefied2"))
+```
+
+#ps
+
+```{r}
+ps_16S <- phyloseq(otu_table(df_16S, taxa_are_rows = FALSE), 
+                   tax_table(tax_16S), 
+                   phy_tree(tree16S_rarefied$data), 
+                   sample_data(metadata))
+
+ps_ITS <- phyloseq(otu_table(df_ITS, taxa_are_rows = FALSE), 
+                   tax_table(tax_ITS), 
+                   phy_tree(treeITS_rarefied$data), 
+                   sample_data(metadata))
+```
+
+#read Genalex
+
+```{r}
+#genetic distance (read GenAlEx Tutorial 2)
+gendist <- read_excel(path = paste0(path_out, "/data/Sugi/Nat_set1-4_poly_gendist.xlsx"), 
+                      sheet = "GD")
+gendist <- as.matrix(column_to_rownames(gendist, var = "...1"))
+#change samplenames for genetic data to be same as microbiome data
+gen_num <- paste0(sapply(str_split(rownames(gendist), "\\d+"), `[`, 1), formatC(as.numeric(str_extract(rownames(gendist), "\\d+")), width = 3, flag = "0"))
+rownames(gendist) <- gen_num
+colnames(gendist) <- gen_num
+gendist <- apply(gendist, 2, replace_na, 0)
+gendist <- gendist + t(gendist)
+
+#divide genetic distance matrix by 3925*4 (total number of loci * 4, see tutorial 2) before analysis
+loci <- 3925
+gendist <- gendist / (loci * 4)
+
+#Nei's pair genetic distance
+Nei_pair <- read_excel(path = paste0(path_out, "/data/Sugi/Nat_set1-4_poly_gendist.xlsx"), 
+                      sheet = "NeiP")
+Nei_pair <- as.matrix(column_to_rownames(Nei_pair, var = "...1"))
+Nei_pair <- as.dist(Nei_pair)
+
+#unbiased Nei's
+uNei_pair <- read_excel(path = paste0(path_out, "/data/Sugi/Nat_set1-4_poly_gendist.xlsx"), 
+                        sheet = "uNeiP")
+uNei_pair <- as.matrix(column_to_rownames(uNei_pair, var = "...1"))
+uNei_pair <- as.dist(uNei_pair)
+
+#pairwised Fst
+Fst <- read_excel(path = paste0(path_out, "/data/Sugi/Nat_set1-4_poly_gendist.xlsx"), 
+                        sheet = "FstP")
+Fst <- as.matrix(column_to_rownames(Fst, var = "...1"))
+Fst <- as.dist(Fst)
+```
+
+##output data
+
+```{r, echo=FALSE}
+write.csv(metadata, file = paste0(path_out, "/data/Sugi/SNP/meta_genname.csv"))
+write.csv(gendist, file = paste0(path_out, "/data/Sugi/SNP/gendist.csv"))
+```
+
+##filter data
+
+```{r}
+#list up samples for analysis
+prune <- rownames(metadata[metadata$num_gen %in% rownames(gendist), ])
+prune_t <- prune[metadata[prune, "site"] == "Tsukuba"]
+prune_k <- prune[metadata[prune, "site"] == "Kawatabi"]
+
+gen_t <- metadata[prune_t, "num_gen"]
+gen_k <- metadata[prune_k, "num_gen"]
+
+#extract genetic distance data for each site
+gendist_t <- as.dist(gendist[gen_t, gen_t])
+gendist_k <- as.dist(gendist[gen_k, gen_k])
+
+#extract microbiome data for each site
+ps_16S_t <- prune_samples(prune_t, ps_16S)
+ps_16S_k <- prune_samples(prune_k, ps_16S)
+ps_ITS_t <- prune_samples(prune_t, ps_ITS)
+ps_ITS_k <- prune_samples(prune_k, ps_ITS)
+```
+
+#dist
+
+```{r}
+dist_br16St <- vegdist(ps_16S_t@otu_table, method = "bray")
+dist_br16Sk <- vegdist(ps_16S_k@otu_table, method = "bray")
+dist_brITSt <- vegdist(ps_ITS_t@otu_table, method = "bray")
+dist_brITSk <- vegdist(ps_ITS_k@otu_table, method = "bray")
+
+dist_UF16St <- UniFrac(ps_16S_t, weighted = TRUE)
+dist_UF16Sk <- UniFrac(ps_16S_k, weighted = TRUE)
+dist_UFITSt <- UniFrac(ps_ITS_t, weighted = TRUE)
+dist_UFITSk <- UniFrac(ps_ITS_k, weighted = TRUE)
+```
+
+#mantel test
+
+```{r}
+set.seed(12)
+mant_br16_t <- mantel(dist_br16St, gendist_t, method = "spearman", permutations = 9999)
+mant_br16_k <- mantel(dist_br16Sk, gendist_k, method = "spearman", permutations = 9999)
+mant_brIT_t <- mantel(dist_brITSt, gendist_t, method = "spearman", permutations = 9999)
+mant_brIT_k <- mantel(dist_brITSk, gendist_k, method = "spearman", permutations = 9999)
+```
+
+```{r}
+res_br16t <- data.frame(method = mant_br16_t$method, 
+                        stat = mant_br16_t$statistic, 
+                        p = mant_br16_t$signif, 
+                        perm = mant_br16_t$permutations)
+res_br16k <- data.frame(method = mant_br16_k$method, 
+                        stat = mant_br16_k$statistic, 
+                        p = mant_br16_k$signif, 
+                        perm = mant_br16_k$permutations)
+res_brITt <- data.frame(method = mant_brIT_t$method, 
+                        stat = mant_brIT_t$statistic, 
+                        p = mant_brIT_t$signif, 
+                        perm = mant_brIT_t$permutations)
+res_brITk <- data.frame(method = mant_brIT_k$method, 
+                        stat = mant_brIT_k$statistic, 
+                        p = mant_brIT_k$signif, 
+                        perm = mant_brIT_k$permutations)
+```
+
+##output result
+
+```{r, echo=FALSE}
+write.csv(res_br16t, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/mantel_br16t.csv"))
+write.csv(res_br16k, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/mantel_br16k.csv"))
+write.csv(res_brITt, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/mantel_brITt.csv"))
+write.csv(res_brITk, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/mantel_brITk.csv"))
+```
+

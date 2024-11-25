@@ -11,7 +11,8 @@ library(readxl)
 library(phyloseq)
 library(tidyverse)
 library(vegan)
-library(mvabund)
+library(car)
+library(MASS)
 ```
 
 #path to raw-data directory (change "path" to your raw-data directory)
@@ -54,6 +55,29 @@ metadata$cloneID <- as.factor(metadata$cloneID)
 metadata$population <- as.factor(metadata$population)
 metadata$site <- as.factor(metadata$site)
 metadata$date <- as.factor(metadata$date)
+
+#population metadata
+meta_pop <- read_excel(paste0(path_out, "/data/Sugi/metadata_2306.xlsx"), sheet = "location")
+
+#result of PCA on climatic variables
+load(paste0(path_out, "/data/Sugi/pca_climate.Rdata"))
+df_pcaclim <- data.frame(pca_clim$x)
+colnames(df_pcaclim) <- paste0(colnames(df_pcaclim), "_clim")
+
+#merge population metadata and PCA result
+meta_pop <- cbind(meta_pop, df_pcaclim)
+
+#add climatic data
+metadata <- metadata %>%
+  select(-c(fullname, latitude, longitude, altitude)) %>%
+  left_join(meta_pop, by = "population")
+rownames(metadata) <- formatC(as.numeric(rownames(metadata)), width = 4, flag = "0")
+```
+
+##write climate and PCA data
+
+```{r, echo=FALSE}
+write.csv(meta_pop, file = paste0(path_out, "/data/Sugi/pop_climate_pca.csv"))
 ```
 
 ##ITS
@@ -74,11 +98,15 @@ treeITS_rarefied <- tree_rarefied2
 rm(list = c("tree2", "tree_rarefied2"))
 ```
 
-{r, eval=FALSE}
-#data from which outliers were excluded
-df_ITS_out <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/exclude/df_rarefied_ITS_out.csv"), row.names = 1)
-rownames(df_rarefied) <- formatC(as.numeric(rownames(df_rarefied)), width = 4, flag = "0") 
-#add 0 to the head of rownames
+#multicollinearity
+
+```{r}
+#test multicollinearity between PCs of climatic data before analysis
+lm_clim1 <- lm(PC1_clim ~ PC2_clim, data = metadata)
+r2_clim1 <- summary(lm_clim1)$r.squared
+
+1 / (1 - r2_clim1)
+```
 
 #phyloseq_object
 
@@ -141,17 +169,14 @@ write.csv(model_bray_16S, file = paste0(path_out, "/231202_Sugi_phyllosphere_Jun
 ```
 
 ```{r}
-set.seed(456)
-adonis2(vegdist(df_16S[metadata$site == "Tsukuba", ]) ~ population, 
-        data = metadata[metadata$site == "Tsukuba", ], 
-        perm = 999, 
-        by = "terms")
+set.seed(183)
+model_bray_16S <- adonis2(dist_bray_16S ~ site * (PC1_clim + PC2_clim), 
+                      data = metadata, 
+                      perm = 999, 
+                      by = "terms")
+model_bray_16S
 
-set.seed(567)
-adonis2(vegdist(df_16S[metadata$site == "Kawatabi", ]) ~ population, 
-        data = metadata[metadata$site == "Kawatabi", ], 
-        perm = 999, 
-        by = "terms")
+write.csv(model_bray_16S, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/PERMANOVA_bray_clim.csv"))
 ```
 
 ###ITS
@@ -178,6 +203,17 @@ model_bray_ITS
 write.csv(model_bray_ITS, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/PERMANOVA_bray_lat.csv"))
 ```
 
+```{r}
+set.seed(183)
+model_bray_ITS <- adonis2(dist_bray_ITS ~ site * (PC1_clim + PC2_clim), 
+                      data = metadata, 
+                      perm = 999, 
+                      by = "terms")
+model_bray_ITS
+
+write.csv(model_bray_ITS, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/PERMANOVA_bray_clim.csv"))
+```
+
 ##UniFrac
 ###16S
 
@@ -193,6 +229,18 @@ model_UF_16S
 #write.csv(model_UF_16S, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/PERMANOVA_weightedUF.csv"))
 ```
 
+```{r}
+set.seed(154)
+model_UF_16S <- adonis2(dist_UF_16S ~ site * (PC1_clim + PC2_clim), 
+                    data = metadata, 
+                    perm = 999, 
+                    by = "terms")
+
+model_UF_16S
+
+#write.csv(model_UF_16S, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/PERMANOVA_weightedUF_clim.csv"))
+```
+
 ###ITS
 
 ```{r}
@@ -205,6 +253,18 @@ model_UF_ITS <- adonis2(dist_UF_ITS ~ site * population,
 model_UF_ITS
 
 #write.csv(model_UF_ITS, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/PERMANOVA_weightedUF.csv"))
+```
+
+```{r}
+set.seed(154)
+model_UF_ITS <- adonis2(dist_UF_ITS ~ site * (PC1_clim + PC2_clim), 
+                    data = metadata, 
+                    perm = 999, 
+                    by = "terms")
+
+model_UF_ITS
+
+#write.csv(model_UF_16S, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/PERMANOVA_weightedUF.csv"))
 ```
 
 ##unweighted UF
@@ -246,7 +306,7 @@ write.csv(model_unUF_ITS, file = paste0(path_out, "/231202_Sugi_phyllosphere_Jun
 
 #Thus, the differences of dispersion among groups should be tested
 disp_bray_16S <- betadisper(dist_bray_16S, 
-                        metadata$latitude, 
+                        metadata$site, 
                         type = "centroid")
 disp_bray_16S
 

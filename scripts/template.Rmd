@@ -10,7 +10,6 @@ date: "2024-10-10"
 library(readxl)
 library(phyloseq)
 library(tidyverse)
-library(vegan)
 ```
 
 #path to raw-data directory (change "path" to your raw-data directory)
@@ -25,24 +24,29 @@ source("../scripts/path.R")
 #source codes
 
 ```{r}
-source("../R/bestNMDS.R")
+#source("../R/bestNMDS.R")
 ```
 
 #read processed data
+#16S
 
 ```{r import}
-#change "16S" to "ITS" to rarefy ITS data
-df_rarefied <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/df_rarefied_16S.csv"), row.names = 1)
-rownames(df_rarefied) <- formatC(as.numeric(rownames(df_rarefied)), width = 4, flag = "0") 
-#add 0 to the head of rownames
+#rarefied_ASV_table
+df_16S <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/df_rarefied_16S.csv"), row.names = 1)
+rownames(df_16S) <- formatC(as.numeric(rownames(df_16S)), width = 4, flag = "0") #add 0 to rownames
 
-tax_table <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/tax_table2_16S.csv"), row.names = 1)
-tax_table <- as.matrix(tax_table)
+#tax_table
+tax_16S <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/tax_table2_16S.csv"), row.names = 1)
+tax_16S <- as.matrix(tax_16S)
 
+#phylogenetic tree
 load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/trees.Rdata"))
+tree16S <- tree2
+tree16S_rarefied <- tree_rarefied2
+rm(list = c("tree2", "tree_rarefied2"))
 
-metadata <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/metadata_2306.xlsx"), 
-                       sheet = "Sheet1")
+#metadata
+metadata <- read_excel(paste0(path_out, "/data/Sugi/metadata_2306.xlsx"), sheet = "Sheet1")
 metadata <- column_to_rownames(metadata, var = "Sample_Name")
 metadata$cloneID <- as.factor(metadata$cloneID)
 metadata$population <- as.factor(metadata$population)
@@ -50,4 +54,19 @@ metadata$site <- as.factor(metadata$site)
 metadata$date <- as.factor(metadata$date)
 ```
 
+```{r}
+#rarefied_ASV_table
+df_ITS <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/df_rarefied_ITS.csv"), row.names = 1)
+rownames(df_ITS) <- formatC(as.numeric(rownames(df_ITS)), width = 4, flag = "0") #add 0 to rownames
+
+#tax_table
+tax_ITS <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/tax_table2_ITS.csv"), row.names = 1)
+tax_ITS <- as.matrix(tax_ITS)
+
+#phylogenetic tree
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/trees.Rdata"))
+treeITS <- tree2
+treeITS_rarefied <- tree_rarefied2
+rm(list = c("tree2", "tree_rarefied2"))
+```
 

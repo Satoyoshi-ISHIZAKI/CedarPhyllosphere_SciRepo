@@ -12,6 +12,8 @@ library(phyloseq)
 library(tidyverse)
 library(vegan)
 library(glm2)
+library(car)
+library(MASS)
 library(ggfortify)
 library(RColorBrewer)
 library(scales)
@@ -47,9 +49,20 @@ metadata$site <- as.factor(metadata$site)
 metadata$date <- as.factor(metadata$date)
 
 #population metadata
+meta_pop <- read_excel(paste0(path_out, "/data/Sugi/metadata_2306.xlsx"), sheet = "location")
 
-meta_pop <- read_excel(paste0(path_out, "/data/Sugi/metadata_2306.xlsx"), 
-                       sheet = "location")
+#result of PCA on climatic variables
+load(paste0(path_out, "/data/Sugi/pca_climate.Rdata"))
+df_pcaclim <- data.frame(pca_clim$x)
+colnames(df_pcaclim) <- paste0(colnames(df_pcaclim), "_clim")
+
+#merge population metadata and PCA result
+meta_pop <- cbind(meta_pop, df_pcaclim)
+
+#basal emission rates of BVOCs
+BVOC_2306 <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/BVOC_summary_240122.xlsx"), 
+                       sheet = "2306_KAWATABI")
+BVOC_2306 <- column_to_rownames(BVOC_2306, var = "samplename")
 
 #log-transformed BVOC emission data
 load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/BVOC_2306_16S_log.Rdata"))
@@ -58,11 +71,6 @@ load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/BV
 #Barplot of basal emission rate
 
 ```{r}
-BVOC_2306 <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/BVOC_summary_240122.xlsx"), 
-                       sheet = "2306_KAWATABI")
-BVOC_2306 <- column_to_rownames(BVOC_2306, var = "samplename")
-
-
 #gather the emission data before plotting
 BVOC_2306_ga <- rownames_to_column(BVOC_2306, var = "ID")
 BVOC_2306_ga <- cbind(population = metadata$population, BVOC_2306_ga)
@@ -158,7 +166,7 @@ ggsave(plot = p_merge, filename = paste0(path_out, "/231202_Sugi_phyllosphere_Ju
        dpi = 400, width = 150, height = 80, units = "mm", scale = 2)
 ```
 
-#LM (to test the correlations between latitude and BVOCs emission rates)
+#GLM (to test the correlations between latitude and BVOCs emission rates)
 
 ```{r}
 #to test the differences of PC1, 2 among groups, perform ANOVA test
@@ -171,37 +179,84 @@ df_total <- data.frame(total = BVOC_2306_total_log)
 df_total <- rownames_to_column(df_total)
 data_pca <- merge(data_pca, df_total, by.x = "samplename", by.y = "rowname")
 
-#merge population metadata
-data_pca <- merge(data_pca, meta_pop, by.x = "population", by.y = "population", all.x = TRUE)
-
 #merge BVOCs emission profile
 df_BVOC <- rownames_to_column(BVOC_2306_log)
 data_pca <- merge(data_pca, df_BVOC, by.x = "samplename", by.y = "rowname")
 
-model_pc1 <- lm(PC1 ~ latitude, data = data_pca)
-model_pc2 <- lm2(PC2 ~ latitude, data = data_pca)
-model_pc3 <- lm(PC3 ~ latitude, data = data_pca)
-model_total <- lm(total ~ latitude, data = data_pca)
+#merge population metadata
+data_pca <- merge(data_pca, meta_pop, by.x = "population", by.y = "population", all.x = TRUE)
+```
+
+```{r}
+#full model (use PC1 and PC2 for climatic data)
+model_pc1_clim <- glm2(PC1 ~ PC1_clim + PC2_clim, data = data_pca, 
+                       family = gaussian(link = "identity"))
+model_pc2_clim <- glm2(PC2 ~ PC1_clim + PC2_clim, data = data_pca, 
+                       family = gaussian(link = "identity"))
+model_total_clim <- glm2(total ~ PC1_clim + PC2_clim, data = data_pca, 
+                         family = gaussian(link = "identity"))
+
+summary(model_pc1_clim)
+summary(model_pc2_clim)
+summary(model_total_clim)
+#none of the models are significant when both PC1 & PC2 included
+```
+
+##test multicollinearity
+
+```{r}
+vif(model_pc1_clim)
+#multicollinearity is not detected
+
+#perform model selection and compare results with one covariate models
+set.seed(123)
+selc_PC1_clim <- stepAIC(model_pc1_clim)
+selc_PC2_clim <- stepAIC(model_pc2_clim)
+selc_total_clim <- stepAIC(model_total_clim)
+#PC1 for climatic data was selected only for the terpene PC1 model
+```
+
+```{r}
+#output models with climatic PC1 as an explanatory variable
+model_pc1_clim <- glm2(PC1 ~ PC1_clim, data = data_pca, 
+                       family = gaussian(link = "identity"))
+model_pc2_clim <- glm2(PC2 ~ PC1_clim, data = data_pca, 
+                       family = gaussian(link = "identity"))
+model_total_clim <- glm2(total ~ PC1_clim, data = data_pca, 
+                         family = gaussian(link = "identity"))
+
+write.csv(cbind(summary(model_pc1_clim)$coefficients, 
+                AIC = summary(model_pc1_clim)$aic), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_pc1_glm_clim.csv"))
+
+write.csv(cbind(summary(model_pc2_clim)$coefficients, 
+                AIC = summary(model_pc2_clim)$aic), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_pc2_glm_clim.csv"))
+
+write.csv(cbind(summary(model_total_clim)$coefficients, 
+                AIC = summary(model_total_clim)$aic), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_total_glm_clim.csv"))
+```
+
+```{r}
+model_pc1 <- glm(PC1 ~ latitude, data = data_pca)
+model_pc2 <- glm(PC2 ~ latitude, data = data_pca)
+model_total <- glm(total ~ latitude, data = data_pca)
 
 summary(model_pc1)
 summary(model_pc2)
-summary(model_pc3)
 summary(model_total)
 
 write.csv(cbind(summary(model_pc1)$coefficients, 
                 AIC = summary(model_pc1)$aic), 
-          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_pc1_lm.csv"))
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_pc1_glm.csv"))
 
 write.csv(cbind(summary(model_pc2)$coefficients, 
                 AIC = summary(model_pc2)$aic), 
-          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_pc2_lm.csv"))
-
-write.csv(cbind(summary(model_pc3)$coefficients, 
-                AIC = summary(model_pc3)$aic), 
-          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_pc3_lm.csv"))
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_pc2_glm.csv"))
 
 write.csv(cbind(summary(model_total)$coefficients, 
                 AIC = summary(model_total)$aic), 
-          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_total_lm.csv"))
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_total_glm.csv"))
 ```
 

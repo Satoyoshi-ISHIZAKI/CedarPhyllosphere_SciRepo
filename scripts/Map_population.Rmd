@@ -32,7 +32,7 @@ source("../scripts/path.R")
 #read processed data
 
 ```{r import}
-location <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/location_Sugi_pop.xlsx"), sheet = "location")
+location <- read_excel(paste0(path_out, "/data/Sugi/metadata_2306.xlsx"), sheet = "location")
 
 #position of site name in the map
 location$Label_X <- c(147.5, 147, 148, 147.5, 143, 130, 124, 136, 125, 124, 130.5, 137, 134, 145.5)

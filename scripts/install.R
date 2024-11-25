@@ -32,3 +32,10 @@ if (!require("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
 
 BiocManager::install("biomformat")
+
+#XLconnect
+install.packages("XLConnect")
+
+#readGenAlEx
+install.packages("devtools")
+devtools::install_github("douglasgscofield/readGenalex")
