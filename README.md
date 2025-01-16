@@ -1,2 +1,3 @@
-# R project for the analysis of phyllosphere microbial communities of Criptomeria japonica, sampled 06/2023
- This is the repository of R project for analysis of amplicon sequencing data of phyllosphere microbiome of Sugi, which were sampled at Tsukuba and Kawatabi, in June 2023.
+# R scripts used for the analysis of phyllosphere microbial communities of *Criptomeria japonica*, sampled 06/2023
+Used for the analysis in "Common garden experiments  suggest terpene-mediated interactions between phyllosphere microbes and *Cryptomeria japonica* populations, with potential influence of its original climates", doi.org/xxxxx (yet to be published).
+Analysing the amplicon sequencing data on the microbial community in the phyllosphere of *C. japonica* (DDBJ Raw Sequence Archive, XXXXXXXXXX). Sampling was done in the common gardens at Tsukuba and Kawatabi, Japan, in June 2023.
