@@ -32,6 +32,13 @@
     "Version": "3.18"
   },
   "Packages": {
+    "AsioHeaders": {
+      "Package": "AsioHeaders",
+      "Version": "1.22.1-2",
+      "Source": "Repository",
+      "Repository": "RSPM",
+      "Hash": "85bf3bd8fa58da21a22d84fd4f4ef0a8"
+    },
     "BH": {
       "Package": "BH",
       "Version": "1.84.0-0",
@@ -462,16 +469,6 @@
       ],
       "Hash": "3cf103db29d75af0221d71946509a30c"
     },
-    "Rttf2pt1": {
-      "Package": "Rttf2pt1",
-      "Version": "1.3.12",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R"
-      ],
-      "Hash": "a60168d094ca7e4de5106d60001c3964"
-    },
     "S4Arrays": {
       "Package": "S4Arrays",
       "Version": "1.2.1",
@@ -599,6 +596,19 @@
       ],
       "Hash": "c9ac8afa5ad1ec7451a61e70f199aeb0"
     },
+    "V8": {
+      "Package": "V8",
+      "Version": "6.0.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "Rcpp",
+        "curl",
+        "jsonlite",
+        "utils"
+      ],
+      "Hash": "6603bfcbc7883a5fed41fb13042a3899"
+    },
     "XVector": {
       "Package": "XVector",
       "Version": "0.42.0",
@@ -695,6 +705,16 @@
         "R"
       ],
       "Hash": "543776ae6848fde2f48ff3816d0628bc"
+    },
+    "bigD": {
+      "Package": "bigD",
+      "Version": "0.3.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R"
+      ],
+      "Hash": "78dfe2b21e523358871eea1601b04b56"
     },
     "biomformat": {
       "Package": "biomformat",
@@ -906,6 +926,26 @@
         "utils"
       ],
       "Hash": "0e14e01ce07e7c88fd25de6d4260d26b"
+    },
+    "chromote": {
+      "Package": "chromote",
+      "Version": "0.3.1",
+      "Source": "Repository",
+      "Repository": "RSPM",
+      "Requirements": [
+        "R6",
+        "curl",
+        "fastmap",
+        "jsonlite",
+        "later",
+        "magrittr",
+        "processx",
+        "promises",
+        "rlang",
+        "utils",
+        "websocket"
+      ],
+      "Hash": "5532726015b620830baae59aa689ea52"
     },
     "class": {
       "Package": "class",
@@ -1344,30 +1384,6 @@
       ],
       "Hash": "6b567375113ceb7d9f800de4dd42218e"
     },
-    "extrafont": {
-      "Package": "extrafont",
-      "Version": "0.19",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "Rttf2pt1",
-        "extrafontdb",
-        "grDevices",
-        "utils"
-      ],
-      "Hash": "03d9939b37164f34e0522fef13e63158"
-    },
-    "extrafontdb": {
-      "Package": "extrafontdb",
-      "Version": "1.0",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R"
-      ],
-      "Hash": "a861555ddec7451c653b40e713166c6f"
-    },
     "fansi": {
       "Package": "fansi",
       "Version": "1.0.6",
@@ -1602,6 +1618,16 @@
         "tidyr"
       ],
       "Hash": "68a4b8852740eba8ba7a437259ddae99"
+    },
+    "ggnewscale": {
+      "Package": "ggnewscale",
+      "Version": "0.5.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "ggplot2"
+      ],
+      "Hash": "0e4714a05e572eacd7c232fde675558e"
     },
     "ggplot2": {
       "Package": "ggplot2",
@@ -1851,6 +1877,36 @@
         "xml2"
       ],
       "Hash": "05e4f5fffb1eecfeaac9ea0b7f255fef"
+    },
+    "gt": {
+      "Package": "gt",
+      "Version": "0.11.1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "base64enc",
+        "bigD",
+        "bitops",
+        "cli",
+        "commonmark",
+        "dplyr",
+        "fs",
+        "glue",
+        "htmltools",
+        "htmlwidgets",
+        "juicyjuice",
+        "magrittr",
+        "markdown",
+        "reactable",
+        "rlang",
+        "sass",
+        "scales",
+        "tidyselect",
+        "vctrs",
+        "xml2"
+      ],
+      "Hash": "3170d1f0f45e531c241179ab57cd30bd"
     },
     "gtable": {
       "Package": "gtable",
@@ -2106,6 +2162,16 @@
         "methods"
       ],
       "Hash": "4e993b65c2c3ffbffce7bb3e2c6f832b"
+    },
+    "juicyjuice": {
+      "Package": "juicyjuice",
+      "Version": "0.1.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "V8"
+      ],
+      "Hash": "3bcd11943da509341838da9399e18bce"
     },
     "knitr": {
       "Package": "knitr",
@@ -2891,6 +2957,31 @@
         "xopen"
       ],
       "Hash": "8f25ebe2ec38b1f2aef3b0d2ef76f6c4"
+    },
+    "reactR": {
+      "Package": "reactR",
+      "Version": "0.6.1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "htmltools"
+      ],
+      "Hash": "b8e3d93f508045812f47136c7c44c251"
+    },
+    "reactable": {
+      "Package": "reactable",
+      "Version": "0.4.4",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "digest",
+        "htmltools",
+        "htmlwidgets",
+        "jsonlite",
+        "reactR"
+      ],
+      "Hash": "6069eb2a6597963eae0605c1875ff14c"
     },
     "readr": {
       "Package": "readr",
@@ -3833,6 +3924,34 @@
         "tibble"
       ],
       "Hash": "16aa934a49658677d8041df9017329b9"
+    },
+    "webshot2": {
+      "Package": "webshot2",
+      "Version": "0.1.1",
+      "Source": "Repository",
+      "Repository": "RSPM",
+      "Requirements": [
+        "R",
+        "callr",
+        "chromote",
+        "later",
+        "magrittr",
+        "promises"
+      ],
+      "Hash": "701b4be1af8d359271f82cb240853693"
+    },
+    "websocket": {
+      "Package": "websocket",
+      "Version": "1.4.2",
+      "Source": "Repository",
+      "Repository": "RSPM",
+      "Requirements": [
+        "AsioHeaders",
+        "R6",
+        "cpp11",
+        "later"
+      ],
+      "Hash": "e77c5569354172d0d04d54a9dec89e33"
     },
     "whisker": {
       "Package": "whisker",
