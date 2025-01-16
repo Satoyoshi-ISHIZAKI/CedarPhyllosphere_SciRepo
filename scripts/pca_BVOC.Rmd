@@ -17,9 +17,14 @@ library(MASS)
 library(ggfortify)
 library(RColorBrewer)
 library(scales)
+library(ggrepel)
 library(gridExtra)
-library(grid)
 library(gtable)
+library(grid)
+library(ggtext)
+
+#do this only once
+#loadfonts()
 ```
 
 #path to raw-data directory (change "path" to your raw-data directory)
@@ -35,6 +40,9 @@ source("../scripts/path.R")
 
 ```{r}
 source("../R/label.R")
+source("../R/html_italic.R")
+source("../R/Greek.R")
+source("../R/gg_italic.R")
 ```
 
 #read processed data
@@ -63,9 +71,27 @@ meta_pop <- cbind(meta_pop, df_pcaclim)
 BVOC_2306 <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/BVOC_summary_240122.xlsx"), 
                        sheet = "2306_KAWATABI")
 BVOC_2306 <- column_to_rownames(BVOC_2306, var = "samplename")
+nonitalic <- greek(colnames(BVOC_2306))
+colnames(BVOC_2306) <- html_italic(colnames(BVOC_2306), sep = "-")
+colnames(BVOC_2306) <- greek(colnames(BVOC_2306))
 
 #log-transformed BVOC emission data
 load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/BVOC_2306_16S_log.Rdata"))
+colnames(BVOC_2306_log) <- greek(colnames(BVOC_2306_log))
+```
+
+#theme settings
+
+```{r}
+#theme settings
+mytheme <-theme(axis.title = element_text(size = 7),
+                axis.text = element_text(size = 6),
+                axis.line = element_line(linewidth = 0.2), 
+                
+                legend.title = element_text(size = 6.5), 
+                legend.text = element_markdown(size = 5.5), 
+                legend.key.size = unit(8, "pt"), 
+                legend.spacing.x = unit(0, "mm"))
 ```
 
 #Barplot of basal emission rate
@@ -79,6 +105,7 @@ BVOC_2306_ga <- gather(BVOC_2306_ga, "BVOC", "emission", c(-ID, -population))
 #assign colors to each terpene
 col_BVOC <- c(colorRampPalette(c("green2", "grey30", "yellow2"))(12), 
               "purple3", "blue3")
+names(col_BVOC) <- colnames(BVOC_2306)
 
 #draw barplot
 p_BVOC <- ggplot(data = BVOC_2306_ga, mapping = aes(x = ID, y = emission, 
@@ -86,22 +113,20 @@ p_BVOC <- ggplot(data = BVOC_2306_ga, mapping = aes(x = ID, y = emission,
                                                                   levels = colnames(BVOC_2306))))
 p_BVOC <- p_BVOC + geom_bar(stat = "identity")
 p_BVOC <- p_BVOC + theme_classic()
+p_BVOC <- p_BVOC + mytheme
 p_BVOC <- p_BVOC + scale_fill_manual(values = col_BVOC)
 p_BVOC <- p_BVOC + scale_y_continuous(labels = label_comma())
 p_BVOC <- p_BVOC + facet_wrap(~ population, scales = "free_x")
-p_BVOC <- p_BVOC + labs(fill = "Terpenes")
-p_BVOC <- p_BVOC + 
+p_BVOC <- p_BVOC + labs(fill = "Terpenes") +
   ylab(expression(paste("Basal Emission Rate (ng ", {gdw^-1}, " ", {h^-1}, ")")))
-p_BVOC <- p_BVOC + theme(axis.title.x = element_blank(), 
-                         axis.text.x = element_blank(), 
-                         axis.ticks.x = element_blank(), 
-                         
-                         legend.key.size = unit(3, "mm"), 
-                         legend.text = element_text(size = 10.5))
+p_BVOC <- p_BVOC + mytheme + 
+  theme(axis.title.x = element_blank(), 
+        axis.text.x = element_blank(), 
+        strip.text.x = element_text(size = 7))
 show(p_BVOC)
 
 ggsave(plot = p_BVOC, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_BVOC.png"), 
-       dpi = 400, width = 150, height = 80, units = "mm")
+       dpi = 300, width = 160, height = 80, units = "mm")
 ```
 
 #pca
@@ -117,39 +142,58 @@ summary(pca_BVOC_log_rm)
 ```
 
 ```{r}
-col_BVOC <- c(rep("green4", 12), "purple3", "blue3")
-col_pop <- colorRampPalette(c("blue3", "orange2"))(3)
+col_BVOC <- c(rep("green3", 12), "purple3", "blue3")
+col_pop <- colorRampPalette(c("dodgerblue", "orangered"))(3)
+
+#scale loading vectors
+#see https://rdrr.io/cran/ggfortify/src/R/plotlib.R
+loadings_sc <- data.frame(PC1 = pca_BVOC_log_rm$rotation[, 1], 
+                          PC2 = pca_BVOC_log_rm$rotation[, 2], 
+                          label = rownames(pca_BVOC_log_rm$rotation))
+scaler <- min(max(abs(p_pca$data$PC1)) / max(abs(loadings_sc$PC1)),
+              max(abs(p_pca$data$PC1)) / max(abs(loadings_sc$PC2)))
+
+loadings_sc[, 1:2] <- loadings_sc[, 1:2] * scaler * 0.8
+loadings_sc$label <- gg_italic(loadings_sc$label, "-")
+#adjustment for the label positions
+loadings_sc$xadj <- c(-0.07, -0.07, -0.07, -0.03, -0.07, -0.07, 0, -0.07, -0.07, -0.07, -0.07, 0, 0)
+loadings_sc$yadj <- c(-0.007, 0.14, 0.06, 0.015, 0.085, 0.013, -0.015, -0.048, 0.115, 0.0375, -0.072, -0.015, 0.02)
 
 p_pca <- autoplot(pca_BVOC_log_rm, 
                   data = cbind(BVOC_2306_log[, -c(14)], 
                                population = metadata$population), 
                   x = 1, y = 2,
                   color = "population", 
-                  size = 2.5, 
-                  loadings = TRUE, 
-                  loadings.color = "grey", 
-                  loadings.label = TRUE, 
-                  loadings.label.color = col_BVOC[-c(14)], 
-                  loadings.label.size = 4) + 
-  coord_fixed(ratio = 1) + 
-  theme_classic() + 
-  labs(color = "Population") + 
-  scale_color_manual(values = col_pop, labels = c("Ajigazawa", "Azouji", "Yakushima")) + 
-  theme(legend.title = element_text(size = 13), 
-        legend.text = element_text(size = 10))
+                  scale = 1
+                  ) +
+  geom_segment(data = loadings_sc, 
+               mapping = aes(x = 0, xend = PC1, y = 0, yend = PC2), 
+               arrow = arrow(length = unit(2.0, "mm")), 
+               color = "grey", 
+               linewidth = .352777778) +
+  geom_text(data = loadings_sc, 
+            mapping = aes(x = PC1 + xadj, y = PC2 + yadj, label = label),
+            size = 5.5 * .352777778,
+            color = col_BVOC[-14],
+            parse = TRUE) +
+  coord_fixed(ratio = 1) +
+  theme_classic() +
+  labs(color = "Population") +
+  scale_color_manual(values = col_pop, labels = c("Ajigazawa", "Azouji", "Yakushima")) +
+  mytheme + theme(legend.position = "none")
 
 show(p_pca)
 
 ggsave(plot = p_pca, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/pca_BVOC_log.png"), 
-       dpi = 400, width = 150, height = 150, units = "mm")
+       dpi = 300, width = 160, height = 160, units = "mm")
 ```
 
 #merge plot
 
 ```{r}
-p_pca_none <- p_pca + theme(legend.position = "inside")
+p_pca_none <- p_pca + theme(legend.position = "bottom")
 legend <- gtable_filter(ggplotGrob(p_pca_none), "guide-box")
-p_pca_none <- p_pca_none + theme(legend.position = "none")
+p_pca_none <- p_pca + theme(legend.position = "none")
 
 pl_BVOC <- arrangeGrob(p_BVOC, top = create_label("a"))
 pl_pca <- arrangeGrob(p_pca_none, top = create_label("b"))
@@ -158,15 +202,15 @@ layout <- rbind(c(1, 2), c(1, 3))
 
 p_merge <- grid.arrange(pl_BVOC, pl_pca, legend, 
                         layout_matrix = layout, 
-                        widths = c(3, 2), 
-                        heights = c(2, 1)
+                        widths = c(5.5, 4.5), 
+                        heights = c(9, 1)
                         )
 
 ggsave(plot = p_merge, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_BVOC_pca.png"), 
-       dpi = 400, width = 150, height = 80, units = "mm", scale = 2)
+       dpi = 300, width = 160, height = 80, units = "mm", scale = 1)
 ```
 
-#GLM (to test the correlations between latitude and BVOCs emission rates)
+#LM (to test the correlations between latitude and BVOCs emission rates)
 
 ```{r}
 #to test the differences of PC1, 2 among groups, perform ANOVA test
@@ -189,17 +233,26 @@ data_pca <- merge(data_pca, meta_pop, by.x = "population", by.y = "population", 
 
 ```{r}
 #full model (use PC1 and PC2 for climatic data)
-model_pc1_clim <- glm2(PC1 ~ PC1_clim + PC2_clim, data = data_pca, 
-                       family = gaussian(link = "identity"))
-model_pc2_clim <- glm2(PC2 ~ PC1_clim + PC2_clim, data = data_pca, 
-                       family = gaussian(link = "identity"))
-model_total_clim <- glm2(total ~ PC1_clim + PC2_clim, data = data_pca, 
-                         family = gaussian(link = "identity"))
+model_pc1_clim <- lm(PC1 ~ PC1_clim + PC2_clim, data = data_pca)
+model_pc2_clim <- lm(PC2 ~ PC1_clim + PC2_clim, data = data_pca)
+model_total_clim <- lm(total ~ PC1_clim + PC2_clim, data = data_pca)
 
 summary(model_pc1_clim)
 summary(model_pc2_clim)
 summary(model_total_clim)
 #none of the models are significant when both PC1 & PC2 included
+
+write.csv(cbind(summary(model_pc1_clim)$coefficients, 
+                AIC = summary(model_pc1_clim)$aic), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_pc1_glm_climtot.csv"))
+
+write.csv(cbind(summary(model_pc2_clim)$coefficients, 
+                AIC = summary(model_pc2_clim)$aic), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_pc2_glm_climtot.csv"))
+
+write.csv(cbind(summary(model_total_clim)$coefficients, 
+                AIC = summary(model_total_clim)$aic), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_total_glm_climtot.csv"))
 ```
 
 ##test multicollinearity
@@ -216,14 +269,13 @@ selc_total_clim <- stepAIC(model_total_clim)
 #PC1 for climatic data was selected only for the terpene PC1 model
 ```
 
+###climatic PC1
+
 ```{r}
 #output models with climatic PC1 as an explanatory variable
-model_pc1_clim <- glm2(PC1 ~ PC1_clim, data = data_pca, 
-                       family = gaussian(link = "identity"))
-model_pc2_clim <- glm2(PC2 ~ PC1_clim, data = data_pca, 
-                       family = gaussian(link = "identity"))
-model_total_clim <- glm2(total ~ PC1_clim, data = data_pca, 
-                         family = gaussian(link = "identity"))
+model_pc1_clim <- lm(PC1 ~ PC1_clim, data = data_pca)
+model_pc2_clim <- lm(PC2 ~ PC1_clim, data = data_pca)
+model_total_clim <- lm(total ~ PC1_clim, data = data_pca)
 
 write.csv(cbind(summary(model_pc1_clim)$coefficients, 
                 AIC = summary(model_pc1_clim)$aic), 
@@ -236,6 +288,108 @@ write.csv(cbind(summary(model_pc2_clim)$coefficients,
 write.csv(cbind(summary(model_total_clim)$coefficients, 
                 AIC = summary(model_total_clim)$aic), 
           file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_total_glm_clim.csv"))
+
+PC1clim <- rbind(summary(model_pc1_clim)$coefficient, 
+                 summary(model_pc2_clim)$coefficient, 
+                 summary(model_total_clim)$coefficient)
+rownames(PC1clim) <- paste0(rep(c("PC1", "PC2", "total"), each = 2),
+                            rep(c("Intercept", "PC1_clim"), 3)
+                            )
+```
+
+###climatic PC2
+
+```{r}
+#output models with climatic PC2 as an explanatory variable
+model_pc1_clim <- lm(PC1 ~ PC2_clim, data = data_pca)
+model_pc2_clim <- lm(PC2 ~ PC2_clim, data = data_pca)
+model_total_clim <- lm(total ~ PC2_clim, data = data_pca)
+
+write.csv(cbind(summary(model_pc1_clim)$coefficients, 
+                AIC = summary(model_pc1_clim)$aic), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_pc1_glm_clim2.csv"))
+
+write.csv(cbind(summary(model_pc2_clim)$coefficients, 
+                AIC = summary(model_pc2_clim)$aic), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_pc2_glm_clim2.csv"))
+
+write.csv(cbind(summary(model_total_clim)$coefficients, 
+                AIC = summary(model_total_clim)$aic), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_total_glm_clim2.csv"))
+
+PC2clim <- rbind(summary(model_pc1_clim)$coefficient, 
+                 summary(model_pc2_clim)$coefficient, 
+                 summary(model_total_clim)$coefficient)
+rownames(PC2clim) <- paste0(rep(c("PC1", "PC2", "total"), each = 2),
+                            rep(c("Intercept", "PC2_clim"), 3)
+                            )
+```
+
+##plot LM with climatic PCs
+
+```{r}
+#climatic PC1
+p_pc1pc1 <- ggplot(data = data_pca, mapping = aes(x = PC1_clim, y = PC1, color = population)) +
+  geom_smooth(method = "lm", color = "black", linewidth = .352777778, alpha = 0.1) +
+  geom_point() +
+  labs(x = "Climatic PC1", y = "Terpene PC1", color = "Population") +
+  scale_color_manual(values = col_pop, labels = c("Ajigazawa", "Azouji", "Yakushima")) +
+  theme_classic() + mytheme +
+  NULL
+
+p_pc2pc1 <- ggplot(data = data_pca, mapping = aes(x = PC1_clim, y = PC2, color = population)) +
+  geom_point() +
+  labs(x = "Climatic PC1", y = "Terpene PC2", color = "Population") +
+  scale_color_manual(values = col_pop, labels = c("Ajigazawa", "Azouji", "Yakushima")) +
+  theme_classic() + mytheme +
+  NULL
+
+#climatic PC2
+p_pc1pc2 <- ggplot(data = data_pca, mapping = aes(x = PC2_clim, y = PC1, color = population)) +
+  geom_smooth(method = "lm", color = "black", linewidth = .352777778, alpha = 0.1) +
+  geom_point() +
+  labs(x = "Climatic PC2", y = "Terpene PC1", color = "Population") +
+  scale_color_manual(values = col_pop, labels = c("Ajigazawa", "Azouji", "Yakushima")) +
+  theme_classic() + mytheme +
+  NULL
+
+p_pc2pc2 <- ggplot(data = data_pca, mapping = aes(x = PC2_clim, y = PC2, color = population)) +
+  geom_point() +
+  labs(x = "Climatic PC2", y = "Terpene PC2", color = "Population") +
+  scale_color_manual(values = col_pop, labels = c("Ajigazawa", "Azouji", "Yakushima")) +
+  theme_classic() + mytheme +
+  NULL
+
+show(p_pc1pc1)
+show(p_pc2pc1)
+show(p_pc1pc2)
+show(p_pc2pc2)
+```
+
+```{r}
+##arrange plots
+pl_pc1pc1 <- p_pc1pc1 + theme(legend.position = "none")
+pl_pc2pc1 <- p_pc2pc1 + theme(legend.position = "none")
+pl_pc1pc2 <- p_pc1pc2 + theme(legend.position = "none")
+pl_pc2pc2 <- p_pc2pc2 + theme(legend.position = "none")
+
+pl_pc1pc1 <- arrangeGrob(pl_pc1pc1, top = create_label("a"))
+pl_pc1pc2 <- arrangeGrob(pl_pc1pc2, top = create_label("b"))
+pl_pc2pc1 <- arrangeGrob(pl_pc2pc1, top = create_label("c"))
+pl_pc2pc2 <- arrangeGrob(pl_pc2pc2, top = create_label("d"))
+
+p_lm <- grid.arrange(pl_pc1pc1, pl_pc1pc2, pl_pc2pc1, pl_pc2pc2, 
+                     nrow = 2)
+
+ggsave(plot = p_lm, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/LM_terpene_climate.png"), 
+       dpi = 300, width = 160, height = 120, units = "mm", scale = 1)
+```
+
+##adjusted p value
+
+```{r}
+adjust <- rbind(PC1clim[c(2, 4), ], PC2clim[c(2, 4), ])
+adjust <- cbind(adjust, p_adj = p.adjust(adjust[, 4], method = "fdr"))
 ```
 
 ```{r}

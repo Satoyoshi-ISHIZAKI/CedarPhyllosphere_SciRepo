@@ -12,10 +12,10 @@ library(phyloseq)
 library(fantaxtic)
 library(tidyverse)
 library(ggnested)
+library(RColorBrewer)
+library(dichromat)
 library(ggtext)
-library(gridExtra)
-library(grid)
-library(gtable)
+library(ggpubr)
 ```
 
 #path to raw-data directory (change "path" to your raw-data directory)
@@ -31,6 +31,7 @@ source("../scripts/path.R")
 ```{r}
 source("../R/label.R")
 source("../R/top_nest.R")
+source("../R/plot_bar_arr.R")
 ```
 
 #read processed data
@@ -49,14 +50,6 @@ load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/trees.R
 tree16S <- tree2
 tree16S_rarefied <- tree_rarefied2
 rm(list = c("tree2", "tree_rarefied2"))
-
-#metadata
-metadata <- read_excel(paste0(path_out, "/data/Sugi/metadata_2306.xlsx"), sheet = "Sheet1")
-metadata <- column_to_rownames(metadata, var = "Sample_Name")
-metadata$cloneID <- as.factor(metadata$cloneID)
-metadata$population <- as.factor(metadata$population)
-metadata$site <- as.factor(metadata$site)
-metadata$date <- as.factor(metadata$date)
 ```
 
 ##ITS
@@ -76,6 +69,31 @@ treeITS_rarefied <- tree_rarefied2
 rm(list = c("tree2", "tree_rarefied2"))
 ```
 
+##metadata
+
+```{r}
+#metadata
+metadata <- read_excel(paste0(path_out, "/data/Sugi/metadata_2306.xlsx"), sheet = "Sheet1")
+metadata <- column_to_rownames(metadata, var = "Sample_Name")
+metadata$cloneID <- as.factor(metadata$cloneID)
+metadata$population <- as.factor(metadata$population)
+metadata$site <- as.factor(metadata$site)
+metadata$date <- as.factor(metadata$date)
+
+#population metadata
+meta_pop <- read_excel(paste0(path_out, "/data/Sugi/metadata_2306.xlsx"), sheet = "location")
+
+#result of PCA on climatic variables
+load(paste0(path_out, "/data/Sugi/pca_climate.Rdata"))
+df_pcaclim <- data.frame(pca_clim$x)
+colnames(df_pcaclim) <- paste0(colnames(df_pcaclim), "_clim")
+
+#merge population metadata and PCA result
+meta_pop <- cbind(meta_pop, df_pcaclim)
+
+metadata$PC1 <- meta_pop$PC1_clim[sapply(metadata$fullname, charmatch, meta_pop$fullname)]
+metadata$PC2 <- meta_pop$PC2_clim[sapply(metadata$fullname, charmatch, meta_pop$fullname)]
+```
 
 ```{r}
 # add clone_ID to rownames (why needed?)
@@ -89,7 +107,7 @@ rownames(metadata) <- paste0(rownames(metadata), "_", metadata$population)
 ```{r}
 #sort metadata in decreacing order accordance with latitude
 meta_lat <- metadata %>%
-  arrange(latitude) %>%
+  arrange(desc(PC1)) %>%
   arrange(site)
 
 otus_16S_lat <- otus_16S[rownames(meta_lat), ]
@@ -127,34 +145,40 @@ ps_ITS <- phyloseq(otu_table(otus_ITS_lat, taxa_are_rows = F),
 ```{r, cache=TRUE, dependson="barplot"}
 #make plot by yourself!!
 #select highly abundant taxa
-top_16S <- top_nest(ps_obj = ps_16S, 
-                    tax_level = "Genus", 
-                    top_level = "Phylum", 
-                    n = 5, 
-                    grouping = "site")
+top_16S <- top_taxa(ps_obj = ps_16S, 
+                    tax_level = "Phylum", 
+                    n_taxa = 8)
 ```
 
 ###kawatabi
 
 ```{r}
+#theme settings
+theme_bar <-theme(axis.title = element_text(size = 7),
+                  axis.text = element_text(size = 5.5),
+                  axis.line = element_line(linewidth = 0.2),
+                  
+                  legend.title = element_text(size = 7), 
+                  legend.text = element_markdown(size = 6), 
+                  legend.key.size = unit(8, "pt"), 
+                  legend.spacing.x = unit(0, "mm"))
+```
+
+```{r}
 top_16S_k <- subset_samples(top_16S$ps_obj, site == "Kawatabi")
 
-p_16S_k <- plot_nested_bar(ps_obj = top_16S_k, 
-                           top_level = "Phylum", 
-                           nested_level = "Genus") +
+p_16S_k <- plot_bar_arr(ps_obj = top_16S_k, 
+                        top_level = "Phylum", 
+                        palette = brewer.pal(7, name = "Set3")) +
   theme_classic() +
   scale_x_discrete(labels = meta_lat[meta_lat$site == "Kawatabi", "xlab"]) +
   geom_vline(xintercept = vline[1:14, "line"], 
+             linewidth = 0.2, 
              linetype = "dashed", color = "black") +
   labs(x = "Kawatabi", y = "Relative Abundance") +
-  theme(axis.title.x = element_text(), 
-        axis.text.x = element_text(),
-        axis.ticks.x = element_blank(),
-        
-        legend.text = element_markdown(size = 10), 
-        legend.key.size = unit(7, "mm"), 
-        legend.spacing.x = unit(5, "mm"), 
-        legend.position = "inside")
+  theme_bar
+
+show(p_16S_k)
 ```
 
 ###tsukuba
@@ -162,30 +186,26 @@ p_16S_k <- plot_nested_bar(ps_obj = top_16S_k,
 ```{r}
 top_16S_t <- subset_samples(top_16S$ps_obj, site == "Tsukuba")
 
-p_16S_t <- plot_nested_bar(ps_obj = top_16S_t, 
-                         top_level = "Phylum", 
-                         nested_level = "Genus") +
+p_16S_t <- plot_bar_arr(ps_obj = top_16S_t, 
+                        top_level = "Phylum", 
+                        palette = brewer.pal(7, name = "Set3")) +
   theme_classic() +
   scale_x_discrete(labels = meta_lat[meta_lat$site == "Tsukuba", "xlab"]) +
-  geom_vline(xintercept = vline[15:28, "line"]-58, 
+  geom_vline(xintercept = vline[15:28, "line"]-58,
+             linewidth = 0.2, 
              linetype = "dashed", color = "black") +
   labs(x = "Tsukuba", y = "Relative Abundance") +
-  theme(axis.title.x = element_text(), 
-        axis.text.x = element_text(),
-        axis.ticks.x = element_blank(),
-        
-        legend.text = element_markdown(), 
-        legend.key.size = unit(7, "mm"), 
-        legend.position = "inside")
+  theme_bar
+
+show(p_16S_t)
 ```
 
 ##ITS
 
 ```{r}
-top_ITS <- top_nest(ps_obj = ps_ITS, 
-                    tax_level = "Family", 
-                    top_level =  "Class", 
-                    n = 6, 
+top_ITS <- top_taxa(ps_obj = ps_ITS, 
+                    tax_level = "Class", 
+                    n_taxa = 8, 
                     grouping = "site"
                     )
 ```
@@ -195,22 +215,16 @@ top_ITS <- top_nest(ps_obj = ps_ITS,
 ```{r}
 top_ITS_k <- subset_samples(top_ITS$ps_obj, site == "Kawatabi")
 
-p_ITS_k <- plot_nested_bar(ps_obj = top_ITS_k, 
-                      top_level = "Class", 
-                      nested_level = "Family") +
+p_ITS_k <- plot_bar_arr(ps_obj = top_ITS_k, 
+                        top_level = "Class", 
+                        palette = brewer.pal(7, name = "Set3")) +
   theme_classic() +
   scale_x_discrete(labels = meta_lat[meta_lat$site == "Kawatabi", "xlab"]) +
   geom_vline(xintercept = vline[1:14, "line"], 
+             linewidth = 0.2, 
              linetype = "dashed", color = "black") +
   labs(x = "Kawatabi", y = "Relative Abundance") +
-  theme(axis.title.x = element_text(), 
-        axis.text.x = element_text(),
-        axis.ticks.x = element_blank(),
-        
-        legend.text = element_markdown(size = 10), 
-        legend.key.size = unit(7, "mm"), 
-        legend.spacing.x = unit(5, "mm"), 
-        legend.position = "inside")
+  theme_bar
 ```
 
 ###tsukuba
@@ -218,60 +232,43 @@ p_ITS_k <- plot_nested_bar(ps_obj = top_ITS_k,
 ```{r}
 top_ITS_t <- subset_samples(top_ITS$ps_obj, site == "Tsukuba")
 
-p_ITS_t <- plot_nested_bar(ps_obj = top_ITS_t, 
-                      top_level = "Class", 
-                      nested_level = "Family") +
+p_ITS_t <- plot_bar_arr(ps_obj = top_ITS_t, 
+                        top_level = "Class", 
+                        palette = brewer.pal(7, name = "Set3")) +
   theme_classic() +
   scale_x_discrete(labels = meta_lat[meta_lat$site == "Tsukuba", "xlab"]) +
   geom_vline(xintercept = vline[15:28, "line"]-58, 
+             linewidth = 0.2, 
              linetype = "dashed", color = "black") +
   labs(x = "Tsukuba", y = "Relative Abundance") +
-  theme(axis.title.x = element_text(), 
-        axis.text.x = element_text(),
-        axis.ticks.x = element_blank(),
-        
-        legend.text = element_markdown(), 
-        legend.key.size = unit(7, "mm"), 
-        legend.position = "inside")
+  theme_bar
 ```
 
 #arrange tow plots
 
 ```{r}
-legend_16S <- gtable_filter(ggplotGrob(p_16S_k), "guide-box")
-legend_ITS <- gtable_filter(ggplotGrob(p_ITS_k), "guide-box")
+p_16S <- ggarrange(p_16S_k, p_16S_t, 
+                   nrow = 1, ncol = 2, 
+                   labels = letters[1:2], 
+                   font.label = list(size = 7, color = "black", face = "bold"), 
+                   common.legend = TRUE, 
+                   legend = "bottom")
+p_ITS <- ggarrange(p_ITS_k, p_ITS_t, 
+                   nrow = 1, ncol = 2, 
+                   labels = letters[3:4], 
+                   font.label = list(size = 7, color = "black", face = "bold"), 
+                   common.legend = TRUE, 
+                   legend = "bottom")
 
-pl_16S_k <- p_16S_k + theme(legend.position = "none")
-pl_16S_t <- p_16S_t + theme(legend.position = "none")
-pl_ITS_k <- p_ITS_k + theme(legend.position = "none")
-pl_ITS_t <- p_ITS_t + theme(legend.position = "none")
+p_all <- ggarrange(p_16S, p_ITS, ncol = 1, nrow = 2)
+#widths = c(2, 0.4)
 
-pl_16S_k <- arrangeGrob(pl_16S_k, top = create_label("a"))
-pl_16S_t <- arrangeGrob(pl_16S_t, top = create_label("b"))
-pl_ITS_k <- arrangeGrob(pl_ITS_k, top = create_label("c"))
-pl_ITS_t <- arrangeGrob(pl_ITS_t, top = create_label("d"))
-
-p_16S <- grid.arrange(pl_16S_k, pl_16S_t, nrow = 1)
-p_ITS <- grid.arrange(pl_ITS_k, pl_ITS_t, nrow = 1)
-
-p_all <- grid.arrange(pl_16S_k, pl_16S_t, legend_16S, pl_ITS_k, pl_ITS_t, legend_ITS,
-                      ncol = 3, nrow = 2, widths = c(1, 1, 0.5))
 
 ggsave(plot = p_16S, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_16S.png"), 
-       dpi = 400, width = 150, height = 80, units = "mm", scale = 2)
+       dpi = 300, width = 160, height = 80, units = "mm", scale = 2)
 ggsave(plot = p_ITS, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/barplot_ITS.png"), 
-       dpi = 400, width = 150, height = 80, units = "mm", scale = 2)
+       dpi = 300, width = 160, height = 80, units = "mm", scale = 2)
 ggsave(p_all, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_both.png"), 
-       dpi = 400, width = 150, height = 160, units = "mm", scale = 2.5)
-```
-
-```{r}
-legend <- grid.arrange(legend_16S, legend_ITS, nrow = 1, ncol = 2)
-ggsave(legend_16S, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_legend.png"), 
-       dpi = 400, width = 120, height = 80, units = "mm")
-ggsave(legend_ITS, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/barplot_legend.png"), 
-       dpi = 400, width = 120, height = 80, units = "mm")
-ggsave(legend, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_legend_both.png"), 
-       dpi = 400, width = 150, height = 160, units = "mm")
+       dpi = 300, width = 160, height = 160, units = "mm", scale = 1)
 ```
 

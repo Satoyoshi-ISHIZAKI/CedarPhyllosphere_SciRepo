@@ -12,8 +12,10 @@ library(phyloseq)
 library(tidyverse)
 library(vegan)
 library(RColorBrewer)
+library(ggrepel)
 library(gridExtra)
 library(gtable)
+library(grid)
 ```
 
 #path to raw-data directory (change "path" to your raw-data directory)
@@ -30,6 +32,9 @@ source("../scripts/path.R")
 ```{r}
 source("../R/occurrence.R")
 source("../R/label.R")
+source("../R/html_italic.R")
+source("../R/Greek.R")
+source("../R/gg_italic.R")
 ```
 
 #read processed data
@@ -66,6 +71,8 @@ BVOC_2306_log_full <- BVOC_2306_log
 BVOC_2306_total_log_full <- BVOC_2306_total_log
 rm(BVOC_2306_log)
 rm(BVOC_2306_total_log)
+colnames(BVOC_2306_log_full) <- greek(colnames(BVOC_2306_log_full))
+colnames(BVOC_2306_log_full) <- gg_italic(colnames(BVOC_2306_log_full), "-")
 
 #output of NMDS (based on bray-curtis dissimilarity)
 load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/NMDS_bray_16S_BVOC2306.Rdata"))
@@ -116,7 +123,8 @@ BVOC_2306_log_out <- BVOC_2306_log
 BVOC_2306_total_log_out <- BVOC_2306_total_log
 rm(BVOC_2306_log)
 rm(BVOC_2306_total_log)
-
+colnames(BVOC_2306_log_out) <- greek(colnames(BVOC_2306_log_out))
+colnames(BVOC_2306_log_out) <- gg_italic(colnames(BVOC_2306_log_out), sep = "-")
 
 #output of NMDS (based on bray-curtis dissimilarity)
 load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/NMDS_bray_ITS_BVOC2306.Rdata"))
@@ -142,10 +150,20 @@ score_16S <- scores(fit_bray_16S, display = "vectors")
 score_16S <- rownames_to_column(data.frame(score_16S))
 score_16S <- data.frame(score_16S, 
                         p = fit_bray_16S$vectors$pvals, 
-                        arr_col = rep("grey", nrow(score_16S)))
+                        arr_col = rep("grey", nrow(score_16S)), 
+                        arr_lty = rep("dashed", nrow(score_16S)))
 score_16S$arr_col[score_16S$p < 0.05] <- "black"
+score_16S$arr_lty[score_16S$p < 0.05] <- "solid"
 
-signif_16S <- score_16S[score_16S$p < 0.05, ]
+signif_16S <- score_16S[score_16S$p < 0.1, ]
+
+#adjustment of the label positions
+signif_16S$adj_x <- c(- 0.1, 0.3)
+signif_16S$adj_y <- c(+ 0.28, -0.13)
+signif_16S$arr_x <- signif_16S$adj_x
+signif_16S$arr_y <- signif_16S$adj_y
+signif_16S$arr_x[1] <- NA
+signif_16S$arr_y[1] <- NA
 ```
 
 ##ITS
@@ -155,12 +173,15 @@ score_ITS <- scores(fit_bray_ITS, display = "vectors")
 score_ITS <- rownames_to_column(data.frame(score_ITS))
 score_ITS <- data.frame(score_ITS, 
                         p = fit_bray_ITS$vectors$pvals, 
-                        arr_col = rep("grey", nrow(score_ITS)))
+                        arr_col = rep("grey", nrow(score_ITS)), 
+                        arr_lty = rep("dashed", nrow(score_ITS)))
 score_ITS$arr_col[score_ITS$p < 0.05] <- "black"
+score_ITS$arr_lty[score_ITS$p < 0.05] <- "solid"
 
-signif_ITS <- score_ITS[score_ITS$p < 0.05, ]
-rownames(signif_ITS) <- "β-Farnesene"
-signif_ITS$rowname <- "β-Farnesene"
+signif_ITS <- score_ITS[score_ITS$p < 0.1, ]
+rownames(signif_ITS) <- greek(rownames(signif_ITS))
+rownames(signif_ITS) <- gg_italic(rownames(signif_ITS), sep = "-")
+signif_ITS$rowname <- rownames(signif_ITS)
 ```
 
 
@@ -176,6 +197,9 @@ score_16S_ASV <- data.frame(score_16S_ASV,
                         arr_col = rep("grey", nrow(score_16S_ASV)))
 
 signif_16S_ASV <- score_16S_ASV[score_16S_ASV$p < 0.05, ]
+
+signif_16S_ASV$adj_x <- c(0.5, 0.1, 0, -0.3, 0.3, 0.5, 0, 0)
+signif_16S_ASV$adj_y <- c(-0.02, 0.3, 0.27, 0.1, 0.1, -0.02, -0.2, -0.2)
 ```
 
 ##ITS
@@ -189,17 +213,34 @@ score_ITS_ASV <- data.frame(score_ITS_ASV,
                         arr_col = rep("grey", nrow(score_ITS_ASV)))
 
 signif_ITS_ASV <- score_ITS_ASV[score_ITS_ASV$p < 0.05, ]
+signif_ITS_ASV$adj_x <- c(0.35, 0, 0, 0, -0.32)
+signif_ITS_ASV$adj_y <- c(0, -0.05, -0.13, -0.02, 0)
 ```
 
 #plot
+##theme settings
+
+```{r}
+#theme settings
+mytheme <-theme(axis.title = element_text(size = 7),
+                axis.text = element_text(size = 6),
+                axis.line = element_line(linewidth = 0.2), 
+                
+                legend.title = element_text(size = 7), 
+                legend.text = element_text(size = 5.5), 
+                legend.key.size = unit(8, "pt"), 
+                legend.spacing.x = unit(0, "mm"))
+```
+
 ##16S
 
 ```{r}
 df_nmds_16S <- data.frame(meta_16S, nmds_16S$nmds$points)
-col_pop <- colorRampPalette(c("blue3", "orange2"))(3)
+col_pop <- colorRampPalette(c("dodgerblue", "orangered"))(3)
+#adjust the position of the names of BVOCs
 
 p_16S <- ggplot(df_nmds_16S, mapping = aes(x = MDS1, y = MDS2)) +
-  theme_classic() + 
+  theme_classic() + mytheme +
   geom_point(data = df_nmds_16S, mapping = aes(colour = population)) +
   coord_fixed(ratio = 1) + ## need aspect ratio of 1!
   scale_color_manual(values = col_pop, labels = c("Ajigazawa", "Azouji", "Yakushima")) +
@@ -209,39 +250,40 @@ p_16S <- ggplot(df_nmds_16S, mapping = aes(x = MDS1, y = MDS2)) +
   #arrows to show the direction of ASV abundance vectors
   geom_segment(data = signif_16S_ASV,
                aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
-               arrow = arrow(length = unit(2.5, "mm")), 
-               color = signif_16S_ASV$arr_col) +
-  geom_text(data = signif_16S_ASV,  
-            aes(x = NMDS1, y = NMDS2, label = Phylum)) +
+               arrow = arrow(length = unit(2, "mm")), 
+               color = signif_16S_ASV$arr_col, 
+               linewidth = 0.35) +
+  geom_text(data = signif_16S_ASV, 
+            aes(x = NMDS1 + adj_x, y = NMDS2 + adj_y, label = Phylum),
+            size = 6 * .352777778,
+            color = "black") +
   
   #arrows to show the direction of BVOC emission vectors
   geom_segment(data = signif_16S,
                aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
-               arrow = arrow(length = unit(2.5, "mm")), 
-               color = "green4") +
-  geom_text(data = signif_16S,  
-            aes(x = NMDS1, y = NMDS2 + 0.1, label = rowname), 
+               arrow = arrow(length = unit(2, "mm")), 
+               color = "green4", 
+               linewidth = .35, 
+               linetype = signif_16S$arr_lty) +
+  geom_text(data = signif_16S, size = 6 * .352777778, 
+            aes(x = NMDS1 + adj_x, y = NMDS2 + adj_y, label = rowname), 
             color = "green4") +
+  geom_segment(data = signif_16S[2, ], 
+               aes(x = NMDS1, xend =NMDS1 + arr_x-0.1, y = NMDS2, yend = NMDS2 + arr_y+0.05), 
+               color = "green4", 
+               linewidth = .35, 
+               linetype = "solid") +
   
-  #annotation to show the significance of BVOC emission vectors
-  geom_segment(data = data.frame(x = 1.3, y = -0.8),
-               aes(x = x, xend = (x + 0.2), y = y, yend = y),
-               arrow = arrow(length = unit(2.5, "mm")), 
-               color = "green4") +
+  #stress value
   annotate("text", 
-           x = 1.82, y = -0.8,
-           label = expression(paste(italic("P"), " < 0.05"))) +
-  
-  #annotation to show the stress value
-  annotate("text", 
-           x = 1.65, y = -1.05,
+           x = 1.65, y = -1.05, size = 7 * .352777778, 
            label = paste0("Stress = ", 
                           round(nmds_16S$nmds$stress, digits = 4)))
 p_16S <- p_16S + theme(legend.position = "none")
   
 show(p_16S)
 ggsave(plot = p_16S, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/envfit_BVOC_ASV_log.png"), 
-       dpi = 400, width = 150, height = 150, units = "mm")
+       dpi = 300, width = 160, height = 160, units = "mm")
 ```
 
 ##ITS
@@ -250,7 +292,7 @@ ggsave(plot = p_16S, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June
 df_nmds_ITS <- data.frame(meta_ITS, nmds_ITS$nmds$points)
 
 p_ITS <- ggplot(df_nmds_ITS, mapping = aes(x = MDS1, y = MDS2)) +
-  theme_classic() + 
+  theme_classic() + mytheme +
   geom_point(data = df_nmds_ITS, mapping = aes(colour = population)) +
   coord_fixed(ratio = 1) + ## need aspect ratio of 1!
   scale_color_manual(values = col_pop, labels = c("Ajigazawa", "Azouji", "Yakushima")) +
@@ -260,39 +302,33 @@ p_ITS <- ggplot(df_nmds_ITS, mapping = aes(x = MDS1, y = MDS2)) +
   #arrows to show the direction of ASV abundance vectors
   geom_segment(data = signif_ITS_ASV,
                aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
-               arrow = arrow(length = unit(2.5, "mm")), 
-               color = signif_ITS_ASV$arr_col) +
-  geom_text(data = signif_ITS_ASV,  
-            aes(x = NMDS1, y = NMDS2, label = Class)) +
+               arrow = arrow(length = unit(2, "mm")), 
+               color = signif_ITS_ASV$arr_col, 
+               linewidth = .35) +
+  geom_text(data = signif_ITS_ASV,
+            aes(x = NMDS1 + adj_x, y = NMDS2 + adj_y, label = Class),
+            size = 6 * .352777778) +
   
   #arrows to show the direction of BVOC emission vectors
   geom_segment(data = signif_ITS,
                aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
-               arrow = arrow(length = unit(2.5, "mm")), 
-               color = "purple3") +
+               arrow = arrow(length = unit(2, "mm")), 
+               color = "purple3", 
+               linewidth = .35) +
   geom_text(data = signif_ITS, 
-            aes(x = NMDS1 + 0.15, y = NMDS2 - 0.15, label = rowname), 
-            color = "purple3") +
-  
-  #annotation to show the significance
-  geom_segment(data = data.frame(x = 0.43, y = -1),
-               aes(x = x, xend = (x + 0.167), y = y, yend = y),
-               arrow = arrow(length = unit(2.5, "mm")), 
-               color = "purple3") +
-  annotate("text", 
-           x = 0.83, y = -1.0,
-           label = expression(paste(italic("P"), " < 0.05"))) +
+            aes(x = NMDS1 + 0.15, y = NMDS2 - 0.18, label = rowname), 
+            color = "purple3", size = 6 * .352777778, parse = TRUE) +
   
   #annotation to show the stress value
   annotate("text", 
-           x = 0.7, y = -1.15,
+           x = 0.7, y = -1.15, size = 7 * .352777778, 
            label = paste0("Stress = ", 
                           round(nmds_ITS$nmds$stress, digits = 4)))
 p_ITS <- p_ITS + theme(legend.position = "none")
 
 show(p_ITS)
 ggsave(plot = p_ITS, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/envfit_BVOC_ASV_log.png"), 
-       dpi = 400, width = 150, height = 150, units = "mm")
+       dpi = 300, width = 160, height = 160, units = "mm")
 ```
 
 #arrange two plots
@@ -303,7 +339,7 @@ p_ITS_label <- arrangeGrob(p_ITS, top = create_label("b"))
 
 p_two_fit <- grid.arrange(p_16S_label, p_ITS_label, nrow = 1)
 ggsave(p_two_fit, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/envfit_BVOC_ASV_log_both.png"), 
-       dpi = 400, width = 150, height = 75, units = "mm", scale = 2)
+       dpi = 300, width = 160, height = 80, units = "mm", scale = 1)
 
 ```
 

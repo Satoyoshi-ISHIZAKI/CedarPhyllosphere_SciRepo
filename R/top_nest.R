@@ -1,5 +1,5 @@
 #select top n abundant taxa and merge other taxa by higher taxonomic identities
-#slightly modified the function "nested_top_taxa" in the package fantaxtic 
+#slightly modified the function "nested_top_taxa" in the package fantaxtic
 library(phyloseq)
 library(fantaxtic)
 

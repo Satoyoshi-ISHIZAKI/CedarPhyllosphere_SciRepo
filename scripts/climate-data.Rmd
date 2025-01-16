@@ -13,8 +13,8 @@ library(ggfortify)
 library(terra)
 library(sf)
 library(gridExtra)
-library(grid)
 library(gtable)
+library(grid)
 ```
 
 #path to raw-data directory (change "path" to your raw-data directory)
@@ -29,7 +29,7 @@ source("../scripts/path.R")
 #source codes
 
 ```{r}
-source("../R/label.R")
+#source("../R/label.R")
 ```
 
 #read processed data
@@ -80,7 +80,8 @@ pop_clim <- cbind(meta_pop, extracted_values)
 #calc snow amount
 
 ```{r}
-#calculate monthly mean snow amount
+#calculate mean monthly snow amount
+#estimate the snow amount as the precipitation in those months with mean temperacture < 0
 pop_clim$snow01 <- pop_clim$pr01
 pop_clim$snow01[pop_clim$tas01 > 0] <- 0
 pop_clim$snow02 <- pop_clim$pr02
@@ -103,46 +104,68 @@ pca_clim <- prcomp(pca_df[, -c(1:5)], scale. = TRUE)
 summary(pca_clim)
 ```
 
+##theme
+
 ```{r}
-p_pca <- autoplot(pca_clim, 
-                  data = pop_clim, 
+#theme settings
+mytheme <-theme(axis.title = element_text(size = 7 * 9/4),
+                axis.text = element_text(size = 6 * 9/4),
+                axis.line = element_line(linewidth = .352777778 * 9/4), 
+                
+                legend.title = element_text(size = 7 * 9/4), 
+                legend.text = element_text(size = 6 * 9/4), 
+                legend.key.size = unit(8 * 9/4, "pt"), 
+                legend.spacing.x = unit(0, "mm"))
+```
+
+
+```{r}
+pop_pl <- pop_clim
+colnames(pop_pl)[length(colnames(pop_pl))] <- "snow"
+pca_pl <- pop_pl[, -c(grep("pr\\d+", colnames(pop_clim)),
+                      grep("tas\\d+", colnames(pop_clim)),
+                      grep("snow\\d+", colnames(pop_clim)))]
+pca_pl <- prcomp(pca_pl[, -c(1:5)], scale. = TRUE)
+
+p_pca <- autoplot(pca_pl, 
+                  data = pop_pl,
                   x = 1, y = 2,
-                  shape = FALSE, 
-                  label = TRUE, 
-                  label.label = "population", 
-                  color = "latitude", 
-                  size = 2.5, 
-                  loadings = TRUE, 
-                  loadings.color = "grey", 
-                  loadings.label = TRUE, 
-                  loadings.label.size = 4) + 
-  coord_fixed(ratio = 1) + 
-  theme_classic() + 
-  labs(color = "Latitude") + 
-  theme(legend.title = element_text(size = 13), 
-        legend.text = element_text(size = 10))
+                  shape = FALSE,
+                  label = TRUE,
+                  label.label = "population",
+                  label.size = 7 * .352777778 * 9/4,
+                  color = "latitude",
+                  loadings = TRUE,
+                  loadings.color = "grey",
+                  loadings.linewidth = 2 * .352777778 * 9/4,
+                  loadings.label = TRUE,
+                  loadings.label.size = 6 * .352777778 * 9/4) +
+  coord_fixed(ratio = 1) +
+  theme_classic() +
+  labs(color = "Latitude") +
+  mytheme
 
 show(p_pca)
 ```
 
 ```{r}
-p_pca2 <- autoplot(pca_clim, 
-                  data = pop_clim, 
+p_pca2 <- autoplot(pca_pl,
+                  data = pop_pl,
                   x = 2, y = 3,
-                  shape = FALSE, 
-                  label = TRUE, 
-                  label.label = "population", 
-                  color = "latitude", 
-                  size = 2.5, 
-                  loadings = TRUE, 
-                  loadings.color = "grey", 
-                  loadings.label = TRUE, 
-                  loadings.label.size = 4) + 
-  coord_fixed(ratio = 1) + 
-  theme_classic() + 
-  labs(color = "Latitude") + 
-  theme(legend.title = element_text(size = 13), 
-        legend.text = element_text(size = 10))
+                  shape = FALSE,
+                  label = TRUE,
+                  label.label = "population",
+                  label.size = 7 * .352777778 * 9/4,
+                  color = "latitude",
+                  loadings = TRUE,
+                  loadings.color = "grey",
+                  loadings.linewidth = .352777778 * 9/4,
+                  loadings.label = TRUE,
+                  loadings.label.size = 6 * .352777778 * 9/4) +
+  coord_fixed(ratio = 1) +
+  theme_classic() +
+  labs(color = "Latitude") +
+  mytheme
 
 show(p_pca2)
 ```
@@ -150,6 +173,7 @@ show(p_pca2)
 #save
 
 ```{r}
+# Save the results
 # Save the results
 pl_pca <- p_pca + theme(legend.position = "none")
 pl_pca2 <- p_pca2 + theme(legend.position = "none")
@@ -161,9 +185,9 @@ p_all <- grid.arrange(pl_pca, pl_pca2, legend,
                       nrow = 1, widths = c(1, 1, 0.25))
 
 ggsave(plot = p_all, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/pca_climate.png"), 
-       dpi = 400, width = 150, height = 75, units = "mm", scale = 9/4)
+       dpi = 300, width = 160, height = 80, units = "mm", scale = 9/4)
 ggsave(plot = p_pca, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/pca_climate12.png"), 
-       dpi = 400, width = 150, height = 150, units = "mm")
+       dpi = 300, width = 160, height = 160, units = "mm")
 ```
 
 ```{r}

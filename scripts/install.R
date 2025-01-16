@@ -1,5 +1,9 @@
 #install packages needed (not via "install.packages")
 
+install.packages("ggnewscale")
+install.packages("gtsummary")
+install.packages("webshot2")
+
 ##Bioconductor
 if (!require("BiocManager", quietly = TRUE))
   install.packages("BiocManager")

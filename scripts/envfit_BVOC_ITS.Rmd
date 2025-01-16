@@ -29,6 +29,31 @@ source("../scripts/path.R")
 source("../R/bestNMDS.R")
 ```
 
+```{r}
+#function to convert "alpha", "beta" ... to Greek letters
+greek <- function(names, sep) {
+  #take a string vector
+  #Greek letters and alphabets are pasted by "-"
+  split <- strsplit(names, sep)
+  split <- lapply(split, 
+                  function(x){c(rep(NA, max(sapply(split,length)) - length(x)), x)})
+  #elements should be the same length
+  
+  #the positions at which Greek letters are used
+  alpha <- grep("alpha", sapply(split, `[`, 1))
+  beta <- grep("beta", sapply(split, `[`, 1))
+  gamma <- grep("gamma", sapply(split, `[`, 1))
+  
+  #replace with Greek letters
+  out <- names
+  out[alpha] <- paste0(sprintf("%s", "\u03B1"), sep, sapply(split, `[`, 2)[alpha])
+  out[beta] <- paste0(sprintf("%s", "\u03B2"), sep, sapply(split, `[`, 2)[beta])
+  out[gamma] <- paste0(sprintf("%s", "\u03B3"), sep, sapply(split, `[`, 2)[gamma])
+  
+  return(out)
+}
+```
+
 #read processed data
 
 ```{r import}
@@ -56,6 +81,7 @@ metadata$date <- as.factor(metadata$date)
 
 #log-transformed BVOCs Emission
 load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/BVOC_2306_ITS_log.Rdata"))
+colnames(BVOC_2306_log) <- greek(colnames(BVOC_2306_log), "-")
 ```
 
 #dist
@@ -97,9 +123,11 @@ write.csv(disp_bray$tab, file = paste0(path_out, "/231202_Sugi_phyllosphere_June
 ##envfit
 
 ```{r envfit}
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/NMDS_bray_ITS_BVOC2306.Rdata"))
+
 set.seed(45)
 fit_bray <- envfit(nmds_bray$nmds, 
-                   cbind(BVOC_2306_log[, -14], total = BVOC_2306_total_log))
+                   cbind(BVOC_2306_log[, -14], total = BVOC_2306_total_log, MTs = MT_2306_log))
 show(fit_bray)
 df_fit_bray <-data.frame(fit_bray$vectors$arrows, 
                          r = fit_bray$vectors$r, 

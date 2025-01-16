@@ -1,0 +1,198 @@
+---
+title: "alpha-BVOC"
+output: html_document
+date: "2024-10-10"
+---
+
+#load packages
+
+```{r}
+library(readxl)
+library(phyloseq)
+library(tidyverse)
+library(vegan)
+library(picante)
+library(RColorBrewer)
+library(ggrepel)
+library(gridExtra)
+library(gtable)
+library(grid)
+```
+
+#path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+#create "path" file, and define "path" as your raw-data directory(character vector) in the file
+#"path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+#source codes
+
+```{r}
+source("../R/occurrence.R")
+source("../R/label.R")
+```
+
+```{r}
+#function to convert "alpha", "beta" ... to Greek letters
+greek <- function(names, sep) {
+  #take a string vector
+  #Greek letters and alphabets are pasted by "-"
+  split <- base::strsplit(names, sep)
+  split <- lapply(split, 
+                  function(x){c(rep(NA, max(sapply(split,length)) - length(x)), x)})
+  #elements should be the same length
+  
+  #the positions at which Greek letters are used
+  alpha <- grep("alpha", sapply(split, `[`, 1))
+  beta <- grep("beta", sapply(split, `[`, 1))
+  gamma <- grep("gamma", sapply(split, `[`, 1))
+  
+  #replace with Greek letters
+  out <- names
+  out[alpha] <- paste0(sprintf("%s", "\u03B1"), sep, sapply(split, `[`, 2)[alpha])
+  out[beta] <- paste0(sprintf("%s", "\u03B2"), sep, sapply(split, `[`, 2)[beta])
+  out[gamma] <- paste0(sprintf("%s", "\u03B3"), sep, sapply(split, `[`, 2)[gamma])
+  
+  return(out)
+}
+```
+
+#read processed data
+##16S
+
+```{r import}
+#rarefied-ASV table
+df_16S <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/df_rarefied_16S_BVOC.csv"), row.names = 1)
+rownames(df_16S) <- formatC(as.numeric(rownames(df_16S)), width = 4, flag = "0") 
+#add 0 to the head of rownames
+
+#tax_table
+tax_16S <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/tax_table2_16S.csv"), row.names = 1)
+tax_16S <- as.matrix(tax_16S)
+
+#phylogenetic tree
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/trees.Rdata"))
+tree16S <- tree2
+tree16S_rarefied <- tree_rarefied2
+rm(list = c("tree2", "tree_rarefied2"))
+
+#metadata
+meta_16S <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/metadata_16S_BVOC.csv"), row.names = 1)
+rownames(meta_16S) <- formatC(as.numeric(rownames(meta_16S)), width = 4, flag = "0")
+
+meta_16S$cloneID <- as.factor(meta_16S$cloneID)
+meta_16S$population <- as.factor(meta_16S$population)
+meta_16S$site <- as.factor(meta_16S$site)
+meta_16S$date <- as.factor(meta_16S$date)
+
+#log-transformed BVOCs Emission
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/BVOC_2306_16S_log.Rdata"))
+BVOC_2306_log_full <- BVOC_2306_log
+MT_2306_log_full <- MT_2306_log
+BVOC_2306_total_log_full <- BVOC_2306_total_log
+rm(BVOC_2306_log)
+rm(MT_2306_log)
+rm(BVOC_2306_total_log)
+colnames(BVOC_2306_log_full) <- greek(colnames(BVOC_2306_log_full), "-")
+
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/pca_BVOC_2306_16S_log.Rdata"))
+```
+
+##ITS
+
+```{r}
+#rarefied-ASV table
+df_ITS <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/df_rarefied_ITS_BVOC.csv"), row.names = 1)
+rownames(df_ITS) <- formatC(as.numeric(rownames(df_ITS)), width = 4, flag = "0") 
+#add 0 to the head of rownames
+
+#tax_table
+tax_ITS <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/tax_table2_ITS.csv"), row.names = 1)
+tax_ITS <- as.matrix(tax_ITS)
+
+#phylogenetic tree
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/trees.Rdata"))
+treeITS <- tree2
+treeITS_rarefied <- tree_rarefied2
+rm(list = c("tree2", "tree_rarefied2"))
+
+#metadata
+meta_ITS <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/metadata_ITS_BVOC.csv"), row.names = 1)
+rownames(meta_ITS) <- formatC(as.numeric(rownames(meta_ITS)), width = 4, flag = "0")
+
+meta_ITS$cloneID <- as.factor(meta_ITS$cloneID)
+meta_ITS$population <- as.factor(meta_ITS$population)
+meta_ITS$site <- as.factor(meta_ITS$site)
+meta_ITS$date <- as.factor(meta_ITS$date)
+
+#log-transformed BVOCs Emission
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/BVOC_2306_ITS_log.Rdata"))
+BVOC_2306_log_out <- BVOC_2306_log
+MT_2306_log_out <- MT_2306_log
+BVOC_2306_total_log_out <- BVOC_2306_total_log
+rm(BVOC_2306_log)
+rm(MT_2306_log)
+rm(BVOC_2306_total_log)
+colnames(BVOC_2306_log_out) <- greek(colnames(BVOC_2306_log_out), sep = "-")
+```
+
+#alpha
+##phylegenetic distance
+
+```{r}
+phydist_16S <- cophenetic(tree16S_rarefied$data)
+phydist_ITS <- cophenetic(treeITS_rarefied$data)
+```
+
+```{r}
+meta_16S$richness <- specnumber(df_16S)
+meta_16S$shannon <- diversity(df_16S, index = "shannon")
+meta_16S$simpson <- diversity(df_16S, index = "simpson")
+faith <- pd(df_16S, tree = tree16S_rarefied$data, include.root = TRUE)
+meta_16S <- cbind(meta_16S, faith)
+meta_16S$wmpd <- mpd(df_16S, dis = phydist_16S, abundance.weighted = TRUE)
+
+meta_ITS$richness <- specnumber(df_ITS)
+meta_ITS$shannon <- diversity(df_ITS, index = "shannon")
+meta_ITS$simpson <- diversity(df_ITS, index = "simpson")
+faith <- pd(df_ITS, tree = treeITS_rarefied$data, include.root = TRUE)
+meta_ITS <- cbind(meta_ITS, faith)
+meta_ITS$wmpd <- mpd(df_ITS, dis = phydist_ITS, abundance.weighted = TRUE)
+```
+
+#ps
+
+```{r}
+ps_16S <- phyloseq(otu_table(df_16S, taxa_are_rows = FALSE), 
+                   tax_table(tax_16S), 
+                   phy_tree(tree16S_rarefied$data), 
+                   sample_data(meta_16S))
+ps_ITS <- phyloseq(otu_table(df_ITS, taxa_are_rows = FALSE), 
+                   tax_table(tax_ITS), 
+                   phy_tree(treeITS_rarefied$data), 
+                   sample_data(meta_ITS))
+```
+
+#plot
+##theme settings
+
+```{r}
+#theme settings
+mytheme <-theme(axis.title = element_text(size = 7),
+                axis.text = element_text(size = 6),
+                axis.line = element_line(linewidth = 0.2), 
+                
+                legend.title = element_text(size = 7), 
+                legend.text = element_text(size = 5.5), 
+                legend.key.size = unit(8, "pt"), 
+                legend.spacing.x = unit(0, "mm"))
+```
+
+#under progress
+
+```{r}
+df_nmds_16S <- data.frame(meta_16S, nmds_16S$nmds$points)
+col_pop <- colorRampPalette(c("blue3", "orange2"))(3)

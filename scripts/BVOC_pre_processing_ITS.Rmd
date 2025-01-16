@@ -120,10 +120,12 @@ ggsave(plot = p_BVOC, filename = paste0(path_out, "/231202_Sugi_phyllosphere_Jun
 
 ```{r}
 BVOC_2306_log <- BVOC_2306 + 0.01
+MT_2306_log <- apply(BVOC_2306_log[, 1:12], 1, sum)
+MT_2306_log <- log(MT_2306_log, base = 10)
 BVOC_2306_total_log <- log(rowSums(BVOC_2306_log), base = 10)
 BVOC_2306_log <- log(BVOC_2306_log, base = 10)
 
-save(BVOC_2306_total_log, BVOC_2306_log, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/BVOC_2306_ITS_log.Rdata"))
+save(BVOC_2306_total_log, MT_2306_log, BVOC_2306_log, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/BVOC_2306_ITS_log.Rdata"))
 write.csv(BVOC_2306_log, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/BVOC_2306_log.csv"))
 ```
 
