@@ -1,0 +1,596 @@
+---
+title: "pathogen_Hiura2021_all"
+output: html_document
+date: "2024-10-10"
+---
+
+Analyze the abundance patterns of all fungal pathogens described to host Sugi in Kobayashi, 2007.
+
+#load packages
+
+```{r}
+library(readxl)
+library(phyloseq)
+library(tidyverse)
+library(vegan)
+library(glm2)
+library(MASS)
+library(RColorBrewer)
+library(gridExtra)
+library(grid)
+library(gtable)
+library(gt)
+```
+
+#path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+#create "path" file, and define "path" as your raw-data directory(character vector) in the file
+#"path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+#source codes
+
+```{r}
+source("../R/occurrence.R")
+source("../R/label.R")
+```
+
+#read processed data
+#ITS
+
+```{r import}
+#rarefied_ASV_table
+df_ITS <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/df_rarefied_ITS.csv"), row.names = 1)
+rownames(df_ITS) <- formatC(as.numeric(rownames(df_ITS)), width = 4, flag = "0") #add 0 to rownames
+
+#tax_table
+tax_ITS <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/tax_table2_ITS.csv"), row.names = 1)
+tax_ITS <- as.matrix(tax_ITS)
+
+#phylogenetic tree
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/trees.Rdata"))
+treeITS <- tree2
+treeITS_rarefied <- tree_rarefied2
+rm(list = c("tree2", "tree_rarefied2"))
+
+#metadata
+metadata <- read_excel(paste0(path_out, "/data/Sugi/metadata_2306.xlsx"), sheet = "Sheet1")
+metadata <- column_to_rownames(metadata, var = "Sample_Name")
+metadata$cloneID <- as.factor(metadata$cloneID)
+metadata$population <- as.factor(metadata$population)
+metadata$site <- as.factor(metadata$site)
+metadata$date <- as.factor(metadata$date)
+
+#read climate data
+meta_pop <- read.csv(paste0(path_out, "/data/Sugi/pop_climate_pca.csv"))
+meta_pop <- column_to_rownames(meta_pop, var = "X")
+
+#add climatic data
+metadata <- metadata %>%
+  dplyr::select(-c(fullname, latitude, longitude, altitude)) %>%
+  left_join(meta_pop, by = "population")
+rownames(metadata) <- formatC(as.numeric(rownames(metadata)), width = 4, flag = "0")
+
+#read the presence-absence data on all described fungal pathogens (Kobayashi, 2007; Hiura et al. 2021)
+pathogen <- read.csv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/pathogens_Hiura2021.csv"))
+pathogen <- column_to_rownames(pathogen, var = "Prefecture")
+
+##process the data format
+##omit columns with NA
+pathogen <- pathogen %>% select_if(function(x) !all(is.na(x)))
+
+#load result of nmds
+#load nmds output
+#load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/NMDS_bray_ITS.Rdata"))
+#nmds_ITS <- nmds_bray
+#rm(nmds_bray)
+```
+
+##for BVOCs
+
+```{r}
+#the microbiome outlier (AZ_040_1, based on bray) is excluded in advance
+#rarefied-ASV table
+df_ITS_ter <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/df_rarefied_ITS_BVOC.csv"), row.names = 1)
+rownames(df_ITS_ter) <- formatC(as.numeric(rownames(df_ITS_ter)), width = 4, flag = "0") 
+#add 0 to the head of rownames
+
+#metadata
+meta_ter <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/metadata_ITS_BVOC.csv"), row.names = 1)
+rownames(meta_ter) <- formatC(as.numeric(rownames(meta_ter)), width = 4, flag = "0")
+
+meta_ter$cloneID <- as.factor(meta_ter$cloneID)
+meta_ter$population <- as.factor(meta_ter$population)
+meta_ter$site <- as.factor(meta_ter$site)
+meta_ter$date <- as.factor(meta_ter$date)
+
+#log-transformed BVOCs Emission
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/BVOC_2306_ITS_log.Rdata"))
+
+#output of NMDS (based on bray-curtis dissimilarity)
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/NMDS_bray_ITS_BVOC2306.Rdata"))
+nmds_ITSter <- nmds_bray
+rm(nmds_bray)
+
+#output of vector-fitting (BVOC on NMDS based on bray)
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/envfit_bray_BVOC.Rdata"))
+```
+
+#make pathogen list
+
+```{r}
+#all pathogen list
+path_ls <- data.frame(sciname = colnames(pathogen))
+
+#extract Genus and Species name
+path_ls <- path_ls %>%
+  mutate(Genus = sapply(str_split(sciname, "\\.", 2), `[`, 1),
+         species = sciname, 
+         annotation = sapply(str_split(sciname, "\\.", 3), `[`, 3))
+#substitute "." in species name with "_"
+path_ls$species <- sub("\\.", "_", path_ls$species)
+#omit needless information from the column "species"
+path_ls$species <- sapply(str_split(path_ls$species, "\\."), `[`, 1)
+
+```
+
+#ps
+
+```{r}
+ps_ITS <- phyloseq(otu_table(df_ITS, taxa_are_rows = FALSE), 
+               tax_table(tax_ITS), 
+               phy_tree(treeITS_rarefied$data), 
+               sample_data(metadata))
+ps_ITS_ter <- phyloseq(otu_table(df_ITS_ter, taxa_are_rows = FALSE), 
+                       tax_table(tax_ITS), 
+                       phy_tree(treeITS_rarefied$data), 
+                       sample_data(meta_ter))
+
+#agglomerate at Species level
+ps_ITS_sp <- tax_glom(ps_ITS, taxrank = "Species")
+ps_ITS_ter_sp <- tax_glom(ps_ITS_ter, taxrank = "Species")
+
+#agglomerate at Genus level
+ps_ITS_gs <- tax_glom(ps_ITS, taxrank = "Genus")
+ps_ITS_ter_gs <- tax_glom(ps_ITS_ter, taxrank = "Genus")
+```
+
+#search Species from tax table
+
+```{r}
+#search pathogens in phyllosphere microbiome
+sp_in <- sapply(path_ls$species, charmatch, ps_ITS_sp@tax_table[, "Species"], nomatch = NA)
+sp_in <- sp_in[!is.na(sp_in)]
+path_sp <- path_ls[path_ls$species == names(sp_in), ]
+path_sp
+#only one species "Sarea_resinae" was detected, whose function is unknown
+View(ps_ITS_sp@otu_table[, rownames(ps_ITS_sp@tax_table[sp_in, ])])
+
+apply(ps_ITS_sp@otu_table[, rownames(ps_ITS_sp@tax_table[sp_in, ])], 2, occurrence)
+#both species are relatively minor
+apply(ps_ITS_sp@otu_table[, rownames(ps_ITS_sp@tax_table[sp_in, ])] > 0, 2, which)
+#Leptosphaeria_sp was detected in 0051, and Sarea_resinae was detected in 0070, 0103
+
+#write.csv(path_sp, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/pathogen_Sp_all.csv"))
+```
+
+##search Genus
+
+```{r}
+#summarize pathogen data
+#some Genus contains two species with different function
+path_gs1 <- pathogen %>%
+  group_by(Genus) %>%
+  summarize(Genus = first(Genus), 
+            species = first(species), 
+            FuncType = first(FuncType))
+path_gs2 <- pathogen %>%
+  group_by(Genus) %>%
+  summarize(Genus = nth(Genus, 2), 
+            species = nth(species, 2), 
+            FuncType = nth(FuncType, 2))
+path_gs <- cbind(path_gs1, 
+                 species2 = path_gs2$species, FuncType2 = path_gs2$FuncType)
+path_gs$FuncType2[is.na(path_gs$FuncType2)] <- path_gs$FuncType[is.na(path_gs$FuncType2)]
+
+##ASVs classified as the Genera included in pathogen data
+test <- subset_taxa(ps_ITS, Genus %in% path_gs$Genus)
+
+#path_gs3 <- pathogen %>%
+#  group_by(Genus) %>%
+#  summarize(Genus = nth(Genus, 3), 
+#            species = nth(species, 3), 
+#            FuncType = nth(FuncType, 3))
+```
+
+```{r}
+gs_in <- sapply(path_gs$Genus, charmatch, ps_ITS_gs@tax_table[, "Genus"], nomatch = NA)
+gs_in <- gs_in[!is.na(gs_in)]
+
+path_gs[sapply(names(gs_in), charmatch, path_gs$Genus), ]
+#11 pathogenic Genera were also in microbiome data
+#extract these ASVs
+gs_asv <- rownames(ps_ITS_gs@tax_table[gs_in, ])
+path_gs$ASV <- NULL
+path_gs$ASV[sapply(names(gs_in), grep, path_gs$Genus)] <- gs_asv
+
+#ps object with only Genera which include pathogens
+ps_ITS_path <- prune_taxa(gs_asv, ps_ITS_gs)
+ps_ITS_ter_path <- prune_taxa(gs_asv, ps_ITS_ter_gs)
+
+#occurrence of each Genus
+path_gs$occurrence <- NULL
+path_gs$occurrence[sapply(rownames(ps_ITS_path@tax_table), 
+                          charmatch, path_gs$ASV)] <- apply(ps_ITS_path@otu_table, 2, occurrence)
+
+#write.csv(path_gs, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/pathogen_Gs.csv"))
+```
+
+#agglomerate genera according to functional guilds
+
+```{r}
+#ps object in which taxa are agglomerated according to functional guilds
+ps_ITS_guild <- ps_ITS_path
+ps_ITS_guild2 <- ps_ITS_guild
+
+#rows of each ASVs in path_gs
+rows <- sapply(rownames(ps_ITS_guild@tax_table), grep, path_gs$ASV)
+
+ps_ITS_guild@tax_table <- tax_table(cbind(FuncType = path_gs[rows, "FuncType"], 
+                                          FuncType2 = path_gs[rows, "FuncType2"], 
+                                          ps_ITS_path@tax_table))
+ps_ITS_guild2@tax_table <- tax_table(cbind(FuncType2 = path_gs[rows, "FuncType2"], 
+                                           FuncType = path_gs[rows, "FuncType"], 
+                                           ps_ITS_path@tax_table))
+
+
+#treat Xeromphalina as a root rot fungi
+ps_ITS_guild1 <- tax_glom(ps_ITS_guild, taxrank = "FuncType")
+#treat Xeromphalina as a brown rot fungi
+ps_ITS_guild2 <- tax_glom(ps_ITS_guild2, taxrank = "FuncType2")
+
+save(ps_ITS_path, ps_ITS_guild, ps_ITS_guild1, ps_ITS_guild2, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/phyloseq_pathogen.Rdata"))
+```
+
+##output pathogen table
+
+```{r}
+path_gs_out <- path_gs
+path_gs_out$reference <- pathogen[sapply(path_gs$species, charmatch, pathogen$species), 7]
+path_gs_out <- path_gs_out %>%
+  tidyr::drop_na(ASV) %>%
+  dplyr::select("Genus" = Genus,
+                "Species" = species,
+                "Functional group" = FuncType,
+                "Reference" = reference)
+path_gs_out$Species <- gsub("_", " ", path_gs_out$Species)
+
+write_tsv(path_gs_out, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/export/Pathogen_putative.tsv"))
+```
+
+```{r}
+path_gs_tbl <- path_gs_out %>% 
+  gt::gt() %>%
+  gt::tab_style(cell_text(weight = "bold"), locations = cells_column_labels(columns = everything())) %>%
+  gt::tab_style(cell_text(style = "italic"), locations = cells_body(columns = c(Genus, Species))) %>%
+  gt::tab_footnote(footnote = "The species described in Kobayashi 2007.", 
+                   locations = cells_column_labels(columns = Species)) %>%
+  gt::tab_footnote(footnote = "The functional groups of the fungal species were inferred from previous studies.", 
+                   locations = cells_column_labels(columns = Reference)) %>%
+  gt::tab_footnote(footnote = "Species for which we have not been able to find any previous studies on their functional groups are classified as \"unknown\" functional groups.", 
+                   locations = cells_column_labels(columns = `Functional group`))
+
+show(path_gs_tbl)
+
+gtsave(path_gs_tbl, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/export/Pathogen_putative.png"))
+```
+
+#envfit (not included in the paper published on Scientific Reports, 2025)
+
+```{r}
+#path_gs <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/pathogen_Gs.csv"))
+#path_gs <- column_to_rownames(path_gs, var = "X")
+
+
+set.seed(56)
+fit_path <- envfit(nmds_ITS$nmds, ps_ITS_path@otu_table)
+fit_path$tax_table <- tax_table(ps_ITS_path)
+show(fit_path)
+df_fit_path <-data.frame(tax_table(ps_ITS_path)[rownames(fit_path$vectors$arrows), "Genus"], 
+                         FuncType = path_gs$FuncType[sapply(rownames(fit_path$vectors$arrows), grep, path_gs$ASV)], 
+                         fit_path$vectors$arrows,
+                         r = fit_path$vectors$r,
+                         p = fit_path$vectors$pvals)
+
+save(fit_path, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/envfit_bray_pathogen.Rdata"))
+write.csv(df_fit_path, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/envfit_bray_pathogen.csv"))
+```
+
+```{r}
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/envfit_bray_pathogen.Rdata"))
+
+path_score <- scores(fit_path, display = "vectors")
+path_score <- rownames_to_column(data.frame(path_score))
+path_score <- data.frame(path_score, 
+                        Genus = fit_path$tax_table[path_score$rowname, "Genus"], 
+                        Functype = path_gs$FuncType[sapply(path_score$rowname, grep, path_gs$ASV)], 
+                        Functype2 = path_gs$FuncType2[sapply(path_score$rowname, grep, path_gs$ASV)], 
+                        p = fit_path$vectors$pvals, 
+                        arr_col = rep("grey", nrow(path_score)))
+
+path_signif <- path_score[path_score$p < 0.1, ]
+```
+
+##plot envfit
+
+```{r}
+#filter population data only
+popmeta <- metadata %>% 
+  dplyr::select(population, fullname, latitude, longitude, altitude) %>% 
+  group_by(population) %>% 
+  summarize(population = first(population), 
+            fullname = first(fullname), 
+            latitude = first(latitude), 
+            longitude = first(longitude), 
+            altitude = first(altitude))
+
+#assign numbers to populations in ascending order with respect to latitude
+replace_rule <- 1:nrow(popmeta)
+names(replace_rule) <- as.character(popmeta$population[sapply(sort(popmeta$latitude), 
+                                                              grep, popmeta$latitude)])
+```
+
+```{r}
+pop_num <- as.character(metadata$population)
+pop_num <- unlist(lapply(pop_num, function(x) replace_rule[x]))
+#set (site * population) levels
+fac_sipop <- as.factor(paste0(metadata$site, LETTERS[pop_num]))
+#assign colors to each element
+#decrease transparency with increasing latitude
+col_sipop <- c(alpha("blue", seq(0.2, 1, length.out = length(replace_rule))), 
+               alpha("orange3", seq(0.2, 1, length.out = length(replace_rule)))
+               )
+```
+
+```{r}
+df_nmds_ITS <- data.frame(metadata, nmds_ITS$nmds$points)
+
+p_ITS <- ggplot(data = df_nmds_ITS, 
+                 mapping = aes(x = MDS1, y = MDS2, color = fac_sipop))
+p_ITS <- p_ITS + theme_classic()
+p_ITS <- p_ITS + coord_fixed(1)
+p_ITS <- p_ITS + xlim(-2.5, 2) + ylim(-2, 2.5)
+p_ITS <- p_ITS + scale_color_manual(values = col_sipop)
+p_ITS <- p_ITS + geom_point()
+p_ITS <- p_ITS + theme(legend.position = "none") +
+
+#arrows to show the direction of Class abundance vectors
+  geom_segment(data = path_signif,
+               aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
+               arrow = arrow(length = unit(2.5, "mm")), 
+               color = "brown") +
+  geom_text(data = path_signif,  
+            aes(x = NMDS1, y = NMDS2, label = Genus), 
+            color = "black") +
+  #annotation to show the significance
+  geom_segment(data = data.frame(x = 1.2, y = -1.8),
+               aes(x = x, xend = (x + 0.2), y = y, yend = y),
+               arrow = arrow(length = unit(2.5, "mm")), 
+               color = "brown") +
+  annotate("text", 
+           x = 1.8, y = -1.8, 
+           label = "P < 0.1")
+
+#stress
+p_ITS <- p_ITS + annotate("text", 
+                          x = 1.5, y = -2,
+                          label = paste0("Stress = ", 
+                                         round(nmds_ITS$nmds$stress, digits = 4)))
+
+show(p_ITS)
+ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/NMDS_bray_pathogen.png"), 
+       plot = p_ITS, 
+       dpi = 400, width = 150, height = 150, units = "mm")
+```
+
+#GLM
+##each guild
+
+```{r}
+path_gs <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/pathogen_Gs.csv"))
+path_gs <- column_to_rownames(path_gs, var = "X")
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/phyloseq_pathogen.Rdata"))
+
+abund_guild <- data.frame(ps_ITS_guild1@otu_table)
+abund_guild2 <- data.frame(ps_ITS_guild2@otu_table)
+
+abund_ga <- cbind(abund_guild, metadata) %>% 
+  dplyr::select(c(ASV2153:ASV7510, site, latitude, PC1_clim, PC2_clim)) %>% 
+  pivot_longer(!site:PC2_clim, names_to = "ASV", values_to = "abundance")
+
+#fix the name of the guilds
+guild <- rownames_to_column(data.frame(ps_ITS_guild1@tax_table[, 1]), var = "ASV")
+guild$col <- c("seagreen2", "brown", "blue3", "grey40", "tomato", "violetred", "pink")
+guild$order <- c(7, 6, 2, 5, 3, 4, 1)
+#remove double space
+guild$FuncType <- sub("  ", " ", guild$FuncType)
+#capitalyze the first letter
+guild$FuncType <- gsub("(^)([[:alpha:]])", "\\1\\U\\2", guild$FuncType, perl=TRUE)
+
+
+abund_ga <- left_join(abund_ga, guild, by = "ASV")
+#show "Unknown" at the last
+abund_ga$FuncType <- factor(abund_ga$FuncType, 
+                            levels = c(unique(abund_ga$FuncType)[-grep("Unknown", 
+                                                                       unique(abund_ga$FuncType))], 
+                                       "Unknown"))
+
+
+ps_ITS_guild1@tax_table[, "FuncType"]
+ps_ITS_guild2@tax_table[, "FuncType2"]
+```
+
+##mytheme
+
+```{r}
+#theme settings
+mytheme <-theme(axis.title = element_text(size = 7),
+                axis.text = element_text(size = 6),
+                axis.line = element_line(linewidth = 0.2), 
+                
+                legend.title = element_text(size = 7), 
+                legend.text = element_text(size = 7), 
+                legend.key.size = unit(8, "pt"), 
+                legend.spacing.x = unit(0, "mm"))
+```
+
+##plot
+
+```{r}
+#show prediction and CI for the model with the total abundance tested on PC1_clim
+path_total <- apply(ps_ITS_guild@otu_table, 1, sum)
+model_p <- glm.nb(path_total~PC1_clim, data = metadata, link = log)
+new_data <- data.frame(PC1_clim = seq(min(abund_ga$PC1_clim), 
+                                      max(abund_ga$PC1_clim), 
+                                      length.out = 100))
+pred <- predict(model_p, newdata = new_data, type = "link", se.fit = TRUE)
+crit <- qnorm(0.975)  # For 95% confidence intervals
+
+new_data$fit <- exp(pred$fit)
+new_data$lower <- exp(pred$fit - crit * pred$se.fit)
+new_data$upper <- exp(pred$fit + crit * pred$se.fit)
+
+#change the order of samples to show leaf rot fungi at the top
+abund_plot <- abund_ga %>% arrange(order)
+
+p_path <- ggplot(data = abund_plot, 
+                 mapping = aes(x = PC1_clim, y = abundance, color = FuncType)) + 
+  scale_color_manual(values = guild$col[sapply(levels(abund_ga$FuncType), grep, guild$FuncType)]) + 
+  geom_line(data = new_data, aes(y = fit), linewidth = 0.35, color = "black") +
+  geom_ribbon(data = new_data, 
+              aes(ymin = lower, ymax = upper, y = fit),
+              alpha = 0.05, linewidth = 0.35, color = "black", fill = "black") +
+  geom_point() + 
+  theme_classic() + mytheme +
+  xlab("Climatic PC1") + ylab("Abundance of the putative pathogenic fungi after rarefaction") + labs(color = "Guild", shape = "Site") + NULL
+  
+show(p_path)
+
+ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/pathogen_climate.png"), 
+       plot = p_path, 
+       dpi = 300, width = 160, height = 90, units = "mm")
+#white, fruit rot fungi seemed to be abundant on saplings from warm region
+```
+
+```{r}
+p_path <- ggplot(data = abund_ga, 
+                 mapping = aes(x = PC2_clim, y = abundance, color = FuncType)) + 
+  geom_point() + 
+  scale_color_manual(values = guild$col[sapply(levels(abund_ga$FuncType), grep, guild$FuncType)]) + 
+  theme_classic() + mytheme +
+  xlab("Climatic PC2") + ylab("Abundance after rarefaction") + labs(color = "Guild", shape = "Site")
+  
+
+show(p_path)
+
+ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/pathogen_climate2.png"), 
+       plot = p_path, 
+       dpi = 300, width = 160, height = 90, units = "mm")
+```
+
+###GLM for each functional type
+
+```{r}
+#test relationships between pathogen abundance and climate or site
+#exclude leaf rot pathogens (since they were absent on all saplings but one)
+model_brown <- glm.nb(abund_guild[, "ASV5543"] ~ site + PC1_clim, 
+                      data = metadata, method = "glm.fit", link = log)
+##treat Xeromphalina as brown rot fungi
+model_brown2 <- glm.nb(abund_guild2[, "ASV5543"] ~ site + PC1_clim, 
+                      data = metadata, method = "glm.fit", link = log)
+
+model_white <- glm.nb(abund_guild[, "ASV5249"] ~ site + PC1_clim, 
+                      data = metadata, method = "glm.fit", link = log)
+
+#pathogens with unknown guild were absent on all saplings at Tsukuba
+model_unknown <- glm.nb(abund_guild[, "ASV2829"] ~ PC1_clim, 
+                      data = metadata, method = "glm.fit", link = log)
+
+#trunk rot pathogens were ansent on all saplings at Kawatabi
+model_trunk <- glm.nb(abund_guild[, "ASV7543"] ~ PC1_clim, 
+                      data = metadata, method = "glm.fit", link = log)
+
+model_root <- glm.nb(abund_guild[, "ASV2762"] ~ site + PC1_clim, 
+                      data = metadata, method = "glm.fit", link = log)
+
+model_fruit <- glm.nb(abund_guild[, "ASV7510"] ~ site + PC1_clim, 
+                      data = metadata, method = "glm.fit", link = log)
+```
+
+```{r}
+summary <- list(brown = summary(model_brown), 
+                brown2 = summary(model_brown2), 
+                white = summary(model_white), 
+                unknown = summary(model_unknown), 
+                trunk = summary(model_trunk), 
+                root = summary(model_root), 
+                fruit = summary(model_fruit))
+```
+
+#total pathogen abundance
+
+```{r}
+path_total <- apply(ps_ITS_guild@otu_table, 1, sum)
+
+plot(metadata$PC1_clim, path_total, col = metadata$site)
+
+model_total <- glm.nb(path_total~site + PC1_clim + PC2_clim, 
+                      data = metadata, link = log)
+summ_tot <- summary(model_total)
+
+#abundance of pathogens were associated with climate(negatively with warmth) at distributions of host cedar populations
+```
+
+#adjusted p value
+
+```{r}
+#bind up all test results
+df_total <- cbind(pathogen = "all", 
+                  call = paste(summ_tot[["call"]], collapse = ", "), 
+                  summ_tot[["coefficients"]], 
+                  aic = summ_tot[["aic"]])
+
+df_list <- list()
+for (i in 1:length(summary)) {
+  df_list[[i]] <- cbind(pathogen = names(summary[i]), 
+                      call = paste(summary[[i]][["call"]], collapse = ", "), 
+                      summary[[i]][["coefficients"]], 
+                      aic = summary[[i]][["aic"]])
+  rownames(df_list[[i]]) <- paste0(rownames(df_list[[i]]), "_", 
+                                   names(summary[i]))
+}
+
+df_res <- rbind(df_total, do.call("rbind", df_list))
+```
+
+```{r}
+#calculate adjusted p value
+#remove values for intercepts (which are not tested here)
+df_res_adjust <- df_res[-grep("Intercept", rownames(df_res)), ]
+df_res_adjust <- df_res_adjust[-grep("brown2", rownames(df_res_adjust)), ]
+
+df_res_adjust <- cbind(df_res_adjust, 
+                       p_adj = p.adjust(df_res_adjust[, "Pr(>|z|)"], method = "BH"))
+
+#brown rot fungi were abundant at Kawatabi
+#pathogens with unknown guild were absent on all saplings at Tsukuba
+#trunk rot pathogens were absent on all saplings at Kawatabi
+
+#save results
+write.csv(df_res, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/glm_pathogen.csv"))
+write.csv(df_res_adjust, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/glm_pathogen_adj.csv"))
+```
+
