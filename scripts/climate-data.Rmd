@@ -29,7 +29,7 @@ source("../scripts/path.R")
 #source codes
 
 ```{r}
-#source("../R/label.R")
+source("../R/label.R")
 ```
 
 #read processed data
@@ -108,13 +108,8 @@ summary(pca_clim)
 
 ```{r}
 #theme settings
-mytheme <-theme(axis.title = element_text(size = 7 * 9/4),
-                axis.text = element_text(size = 6 * 9/4),
-                axis.line = element_line(linewidth = .352777778 * 9/4), 
-                
-                legend.title = element_text(size = 7 * 9/4), 
-                legend.text = element_text(size = 6 * 9/4), 
-                legend.key.size = unit(8 * 9/4, "pt"), 
+mytheme <-theme(axis.text = element_text(color = "black"), 
+                legend.key.size = unit(8, "pt"), 
                 legend.spacing.x = unit(0, "mm"))
 ```
 
@@ -133,15 +128,16 @@ p_pca <- autoplot(pca_pl,
                   shape = FALSE,
                   label = TRUE,
                   label.label = "population",
-                  label.size = 7 * .352777778 * 9/4,
+                  label.size = 10 * .352777778,
                   color = "latitude",
                   loadings = TRUE,
                   loadings.color = "grey",
-                  loadings.linewidth = 2 * .352777778 * 9/4,
+                  loadings.linewidth = 3 * .352777778,
                   loadings.label = TRUE,
-                  loadings.label.size = 6 * .352777778 * 9/4) +
+                  loadings.label.color = "black",
+                  loadings.label.size = 10 * .352777778) +
   coord_fixed(ratio = 1) +
-  theme_classic() +
+  theme_classic(base_size = 12) +
   labs(color = "Latitude") +
   mytheme
 
@@ -155,15 +151,16 @@ p_pca2 <- autoplot(pca_pl,
                   shape = FALSE,
                   label = TRUE,
                   label.label = "population",
-                  label.size = 7 * .352777778 * 9/4,
+                  label.size = 10 * .352777778,
                   color = "latitude",
                   loadings = TRUE,
                   loadings.color = "grey",
-                  loadings.linewidth = .352777778 * 9/4,
+                  loadings.linewidth = 3 * .352777778,
                   loadings.label = TRUE,
-                  loadings.label.size = 6 * .352777778 * 9/4) +
+                  loadings.label.color = "black", 
+                  loadings.label.size = 10 * .352777778) +
   coord_fixed(ratio = 1) +
-  theme_classic() +
+  theme_classic(base_size = 12) +
   labs(color = "Latitude") +
   mytheme
 
@@ -177,8 +174,8 @@ show(p_pca2)
 # Save the results
 pl_pca <- p_pca + theme(legend.position = "none")
 pl_pca2 <- p_pca2 + theme(legend.position = "none")
-pl_pca <- arrangeGrob(pl_pca, top = create_label("a"))
-pl_pca2 <- arrangeGrob(pl_pca2, top = create_label("b"))
+pl_pca <- arrangeGrob(pl_pca, top = create_label("A"))
+pl_pca2 <- arrangeGrob(pl_pca2, top = create_label("B"))
 legend <- gtable_filter(ggplotGrob(p_pca), "guide-box")
 
 p_all <- grid.arrange(pl_pca, pl_pca2, legend, 
@@ -186,7 +183,7 @@ p_all <- grid.arrange(pl_pca, pl_pca2, legend,
 
 ggsave(plot = p_all, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/pca_climate.png"), 
        dpi = 300, width = 160, height = 80, units = "mm", scale = 9/4)
-ggsave(plot = p_pca, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/pca_climate12.png"), 
+ggsave(plot = p_pca, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/pca_climate12.pdf"), 
        dpi = 300, width = 160, height = 160, units = "mm")
 ```
 

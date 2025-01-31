@@ -15,8 +15,6 @@ html_italic <- function(names, sep) {
   
   #other alphabets
   out[latin] <- paste0(sprintf("<i>%s</i>", sapply(split, `[`, 1)[latin]), sep, sapply(split, `[`, 2)[latin])
-  #insert spaces pre- and post "-"
-  out <- gsub("-", " - ", out)
   
   
   return(out)

@@ -198,7 +198,7 @@ score_16S_ASV <- data.frame(score_16S_ASV,
 
 signif_16S_ASV <- score_16S_ASV[score_16S_ASV$p < 0.05, ]
 
-signif_16S_ASV$adj_x <- c(0.5, 0.1, 0, -0.3, 0.3, 0.5, 0, 0)
+signif_16S_ASV$adj_x <- c(0.5, 0.1, 0.1, -0.3, 0.3, 0.5, 0, 0)
 signif_16S_ASV$adj_y <- c(-0.02, 0.3, 0.27, 0.1, 0.1, -0.02, -0.2, -0.2)
 ```
 
@@ -213,8 +213,8 @@ score_ITS_ASV <- data.frame(score_ITS_ASV,
                         arr_col = rep("grey", nrow(score_ITS_ASV)))
 
 signif_ITS_ASV <- score_ITS_ASV[score_ITS_ASV$p < 0.05, ]
-signif_ITS_ASV$adj_x <- c(0.35, 0, 0, 0, -0.32)
-signif_ITS_ASV$adj_y <- c(0, -0.05, -0.13, -0.02, 0)
+signif_ITS_ASV$adj_x <- c(0.35, 0, 0, 0, -0.2)
+signif_ITS_ASV$adj_y <- c(0, -0.05, -0.13, -0.02, 0.2)
 ```
 
 #plot
@@ -222,12 +222,8 @@ signif_ITS_ASV$adj_y <- c(0, -0.05, -0.13, -0.02, 0)
 
 ```{r}
 #theme settings
-mytheme <-theme(axis.title = element_text(size = 7),
-                axis.text = element_text(size = 6),
-                axis.line = element_line(linewidth = 0.2), 
-                
-                legend.title = element_text(size = 7), 
-                legend.text = element_text(size = 5.5), 
+mytheme <-theme(text = element_text(color = "black"),
+                axis.text = element_text(color = "black"),
                 legend.key.size = unit(8, "pt"), 
                 legend.spacing.x = unit(0, "mm"))
 ```
@@ -243,7 +239,7 @@ p_16S <- ggplot(df_nmds_16S, mapping = aes(x = MDS1, y = MDS2)) +
   theme_classic() + mytheme +
   geom_point(data = df_nmds_16S, mapping = aes(colour = population)) +
   coord_fixed(ratio = 1) + ## need aspect ratio of 1!
-  scale_color_manual(values = col_pop, labels = c("Ajigazawa", "Azouji", "Yakushima")) +
+  scale_color_manual(values = col_pop, labels = c("Ajigasawa", "Azouji", "Yakushima")) +
   labs(color = "Population") +
   xlim(c(-1.1, 2.1)) + ylim(c(-1.1, 2.1)) +
   
@@ -252,10 +248,10 @@ p_16S <- ggplot(df_nmds_16S, mapping = aes(x = MDS1, y = MDS2)) +
                aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
                arrow = arrow(length = unit(2, "mm")), 
                color = signif_16S_ASV$arr_col, 
-               linewidth = 0.35) +
+               linewidth = 0.7) +
   geom_text(data = signif_16S_ASV, 
             aes(x = NMDS1 + adj_x, y = NMDS2 + adj_y, label = Phylum),
-            size = 6 * .352777778,
+            size = 8 * .352777778,
             color = "black") +
   
   #arrows to show the direction of BVOC emission vectors
@@ -263,20 +259,20 @@ p_16S <- ggplot(df_nmds_16S, mapping = aes(x = MDS1, y = MDS2)) +
                aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
                arrow = arrow(length = unit(2, "mm")), 
                color = "green4", 
-               linewidth = .35, 
+               linewidth = .7, 
                linetype = signif_16S$arr_lty) +
-  geom_text(data = signif_16S, size = 6 * .352777778, 
+  geom_text(data = signif_16S, size = 8 * .352777778, 
             aes(x = NMDS1 + adj_x, y = NMDS2 + adj_y, label = rowname), 
-            color = "green4") +
+            color = "black") +
   geom_segment(data = signif_16S[2, ], 
                aes(x = NMDS1, xend =NMDS1 + arr_x-0.1, y = NMDS2, yend = NMDS2 + arr_y+0.05), 
                color = "green4", 
-               linewidth = .35, 
+               linewidth = .7, 
                linetype = "solid") +
   
   #stress value
   annotate("text", 
-           x = 1.65, y = -1.05, size = 7 * .352777778, 
+           x = 1.65, y = -1.05, size = 8 * .352777778, 
            label = paste0("Stress = ", 
                           round(nmds_16S$nmds$stress, digits = 4)))
 p_16S <- p_16S + theme(legend.position = "none")
@@ -304,24 +300,24 @@ p_ITS <- ggplot(df_nmds_ITS, mapping = aes(x = MDS1, y = MDS2)) +
                aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
                arrow = arrow(length = unit(2, "mm")), 
                color = signif_ITS_ASV$arr_col, 
-               linewidth = .35) +
+               linewidth = .7) +
   geom_text(data = signif_ITS_ASV,
             aes(x = NMDS1 + adj_x, y = NMDS2 + adj_y, label = Class),
-            size = 6 * .352777778) +
+            size = 8 * .352777778) +
   
   #arrows to show the direction of BVOC emission vectors
   geom_segment(data = signif_ITS,
                aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
                arrow = arrow(length = unit(2, "mm")), 
                color = "purple3", 
-               linewidth = .35) +
+               linewidth = .7) +
   geom_text(data = signif_ITS, 
             aes(x = NMDS1 + 0.15, y = NMDS2 - 0.18, label = rowname), 
-            color = "purple3", size = 6 * .352777778, parse = TRUE) +
+            color = "black", size = 8 * .352777778, parse = TRUE) +
   
   #annotation to show the stress value
   annotate("text", 
-           x = 0.7, y = -1.15, size = 7 * .352777778, 
+           x = 0.7, y = -1.15, size = 8 * .352777778, 
            label = paste0("Stress = ", 
                           round(nmds_ITS$nmds$stress, digits = 4)))
 p_ITS <- p_ITS + theme(legend.position = "none")
@@ -334,12 +330,18 @@ ggsave(plot = p_ITS, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June
 #arrange two plots
 
 ```{r}
-p_16S_label <- arrangeGrob(p_16S, top = create_label("a"))
-p_ITS_label <- arrangeGrob(p_ITS, top = create_label("b"))
+p_16S_label <- p_16S + theme(legend.position = "bottom")
+legend <- gtable_filter(ggplotGrob(p_16S_label), "guide-box")
+vp_16S_label <- p_16S + theme(legend.position = "none")
+p_16S_label <- arrangeGrob(p_16S, top = create_label("A"))
+p_ITS_label <- arrangeGrob(p_ITS, top = create_label("B"))
 
-p_two_fit <- grid.arrange(p_16S_label, p_ITS_label, nrow = 1)
-ggsave(p_two_fit, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/envfit_BVOC_ASV_log_both.png"), 
-       dpi = 300, width = 160, height = 80, units = "mm", scale = 1)
+layout <- rbind(c(1,2), c(3,3))
+
+p_two_fit <- grid.arrange(p_16S_label, p_ITS_label, legend, 
+                          layout_matrix = layout, widths = c(1, 1), heights = c(9, 1))
+ggsave(p_two_fit, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/envfit_BVOC_ASV_log_both1.pdf"), 
+       dpi = 300, width = 160, height = 90, units = "mm", scale = 1)
 
 ```
 
