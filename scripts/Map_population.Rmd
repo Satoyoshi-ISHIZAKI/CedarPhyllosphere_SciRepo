@@ -34,9 +34,8 @@ source("../scripts/path.R")
 ##theme settings
 
 ```{r}
-theme_pt <-theme(axis.title = element_text(size = 7),
-                 axis.text = element_text(size = 7),
-                 axis.line = element_line(linewidth = 0.2))
+theme_pt <-theme(text = element_text(color = "black"), 
+                 axis.text = element_text(color = "black"))
 ```
 
 #read processed data
@@ -71,21 +70,21 @@ map <- ggplot(data = japan) +
               aes(x = longitude, y = latitude,
                   xend = Label_X + tip_X, yend = Label_Y + tip_Y),
               color = "black",
-              linewidth = 0.5) +
+              linewidth = 0.7) +
   # Add labels at specified positions
   geom_text(data = location,
-            aes(x = Label_X, y = Label_Y, label = paste0(fullname, "(", population, ")")),
-            size = 7 * .352777778) +
+            aes(x = Label_X, y = Label_Y, label = paste0(fullname, " (", population, ")")),
+            size = 8 * .352777778) +
   
   coord_sf(xlim = c(120, 156), # Extended map boundaries to accommodate labels
           ylim = c(25, 46), 
           expand = FALSE) +
   xlab("Longitude") + ylab("Latitude") +
-  theme_classic() + theme_pt
+  theme_classic(base_size = 12) + theme_pt
 
 show(map)
 # Save the map (optional)
-ggsave(plot = map, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/population_map.png"), 
+ggsave(plot = map, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/population_map1.pdf"), 
        width = 160, height = 130, units = "mm", dpi = 300)
 ```
 
@@ -93,16 +92,20 @@ ggsave(plot = map, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_1
 
 ```{r}
 location_tbl <- location %>%
-  select(c("Population" = fullname,
-           "Abbreviation" = population,
-           "Latitude (N°)" = latitude,
-           "Longitude (E°)" = longitude,
-           "Elevation (m)" = altitude)) %>%
+  dplyr::select(c("Population" = fullname,
+                  "Abbreviation" = population,
+                  "Latitude (N°)" = latitude,
+                  "Longitude (E°)" = longitude,
+                  "Elevation (m)" = altitude)) %>%
   gt::gt() %>%
-  tab_style(cell_text(weight = "bold"), locations = cells_column_labels(columns = everything()))
+  tab_style(cell_text(weight = "bold"), locations = cells_column_labels(columns = everything())) %>%
+  tab_options(table.font.names = "Times New Roman")
 
 show(location_tbl)
 
-gtsave(location_tbl, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/export/location_pop.png"))
+gtsave(location_tbl, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/export/location_pop.png"), 
+       vwidth = 1890, vheight = 1417)
+#gtsave(location_tbl, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/export/location_pop.pdf"), 
+#       vwidth = 1890, vheight = 1417)
 ```
 
