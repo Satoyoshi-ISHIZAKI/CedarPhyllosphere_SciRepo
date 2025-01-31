@@ -11,7 +11,9 @@ library(readxl)
 library(phyloseq)
 library(tidyverse)
 library(vegan)
-library(ggpubr)
+library(gridExtra)
+library(grid)
+library(gtable)
 library(ggnewscale)
 ```
 
@@ -138,13 +140,10 @@ ps_ITS <- phyloseq(otu_table(df_ITS, taxa_are_rows = FALSE),
 
 ```{r}
 #theme settings
-theme_pt <-theme(axis.title = element_text(size = 7),
-                 axis.text = element_text(size = 7),
-                 axis.line = element_line(linewidth = 0.2), 
+theme_pt <-theme(text = element_text(color = "black"), 
+                 axis.text = element_text(color = "black"),
                  
-                 legend.title = element_text(size = 7), 
-                 legend.text = element_text(size = 6), 
-                 legend.key.size = unit(10, "pt"), 
+                 legend.key.size = unit(9, "pt"), 
                  legend.spacing.x = unit(0, "mm"), 
                  NULL)
 ```
@@ -168,13 +167,13 @@ p_16S <- ggplot() +
   labs(color = "Climatic PC1") +
   
   #theme and plot range
-  theme_classic() + theme_pt +
+  theme_classic(base_size = 12) + theme_pt +
   coord_fixed(1) +
   xlim(-2, 2) + ylim(-2, 2) +
   
   #stress value
   annotate("text", 
-           x = 1.35, y = -2, size = 7 * .352777778, 
+           x = 1.35, y = -2, size = 8 * .352777778, 
            label = paste0("Stress = ", 
                           round(nmds_16S$nmds$stress, digits = 4)))
 
@@ -188,14 +187,14 @@ ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/N
 ```{r, echo=FALSE}
 p_16S <- ggplot(data = df_nmds_16S, 
                  mapping = aes(x = MDS1, y = MDS2, color = clade)) +
-  theme_classic() +
+  theme_classic(base_size = 12) +
   coord_fixed(1) +
   xlim(-2, 2) + ylim(-2, 2) +
   geom_point() +
   scale_color_viridis_d() +
   theme_pt + labs(color = "Clade") +
   annotate("text", 
-           x = 1.35, y = -2, size = 7 * .352777778, 
+           x = 1.35, y = -2, size = 8 * .352777778, 
            label = paste0("Stress = ", 
                           round(nmds_16S$nmds$stress, digits = 4)))
 
@@ -269,13 +268,13 @@ p_ITS <- ggplot() +
   labs(color = "Climatic PC1") +
   
   #theme and plot range
-  theme_classic() + theme_pt +
+  theme_classic(base_size = 12) + theme_pt +
   coord_fixed(1) +
   xlim(-2.5, 2) + ylim(-2, 2.5) +
   
   #stress
   annotate("text", 
-           x = 1.5, y = -2, size = 7 * .352777778, 
+           x = 1.3, y = -2, size = 8 * .352777778, 
            label = paste0("Stress = ", 
                           round(nmds_ITS$nmds$stress, digits = 4)))
 
@@ -383,19 +382,27 @@ ggsave(grid.arrange(legend),
 ##layout two plots
 
 ```{r}
-p_two_bray <- ggarrange(p_16S, p_ITS, nrow = 1, ncol = 2, 
-                        common.legend = TRUE, 
-                        legend = "bottom", 
-                        labels = letters[1:2], 
-                        font.label = list(size = 7, color = "black", face = "bold"))
-ggsave(p_two_bray, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/NMDS_bray_both.png"), 
-       dpi = 300, width = 160, height = 80, units = "mm", scale = 1)
+pl_16S <- p_16S + theme(legend.position = "bottom")
+legend <- gtable_filter(ggplotGrob(pl_16S), "guide-box")
+pl_16S <- pl_16S + theme(legend.position = "none")
+pl_ITS <- p_ITS + theme(legend.position = "none")
 
-p_two_bray_ASV <- ggarrange(p_16S_ASV, p_ITS_ASV, nrow = 1, ncol = 2, 
-                            labels = letters[1:2], 
-                            font.label = list(size = 7, color = "black", face = "bold"))
-ggsave(p_two_bray_ASV, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/NMDS_bray_both_ASV.png"), 
-       dpi = 400, width = 160, height = 80, units = "mm", scale = 1)
+pl_16S <- arrangeGrob(pl_16S, top = create_label("A"))
+pl_ITS <- arrangeGrob(pl_ITS, top = create_label("B"))
+
+layout <- rbind(c(1,2), c(3,3))
+
+p_two_bray <- grid.arrange(pl_16S, pl_ITS, legend, 
+                           layout_matrix = layout, widths = c(1, 1), heights = c(9, 1))
+
+ggsave(p_two_bray, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/NMDS_bray_both1.pdf"), 
+       dpi = 300, width = 160, height = 90, units = "mm", scale = 1)
+
+#p_two_bray_ASV <- ggarrange(p_16S_ASV, p_ITS_ASV, nrow = 1, ncol = 2, 
+#                            labels = letters[1:2], 
+#                            font.label = list(size = 7, color = "black", face = "bold"))
+#ggsave(p_two_bray_ASV, filename = paste0(path_out, #"/231202_Sugi_phyllosphere_June_16S/figures/NMDS_bray_both_ASV.png"), 
+#       dpi = 400, width = 160, height = 80, units = "mm", scale = 1)
 ```
 
 #UniFrac
