@@ -1,5 +1,5 @@
 ---
-title: "pathogen_Hiura2021_all"
+title: "pathogen_Hiura2021"
 output: html_document
 date: "2024-10-10"
 ---
@@ -14,9 +14,6 @@ library(tidyverse)
 library(vegan)
 library(glm2)
 library(MASS)
-library(lmtest)
-library(ggfortify)
-library(ggeffects)
 library(RColorBrewer)
 library(gridExtra)
 library(grid)
@@ -38,8 +35,6 @@ source("../scripts/path.R")
 ```{r}
 source("../R/occurrence.R")
 source("../R/label.R")
-source("../R/Greek.R")
-source("../R/html_italic.R")
 ```
 
 #read processed data
@@ -99,20 +94,6 @@ meta_ter$date <- as.factor(meta_ter$date)
 
 #log-transformed BVOCs Emission
 load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/BVOC_2306_ITS_log.Rdata"))
-colnames(BVOC_2306_log) <- greek(colnames(BVOC_2306_log))
-colnames(BVOC_2306_log) <- html_italic(colnames(BVOC_2306_log), "-")
-BVOC_2306_log <- rownames_to_column(BVOC_2306_log, var = "samplename")
-
-#load terpene PCA result
-load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/pca_BVOC_2306_16S_log.Rdata"))
-pca_BVOC_coor <- data.frame(pca_BVOC_log_rm$x) %>%
-  rownames_to_column(var = "samplename")
-
-
-#merge metadata and BVOC data
-meta_ter_pca <- left_join(meta_ter, BVOC_2306_log, by = "samplename") %>%
-  left_join(y = pca_BVOC_coor, by = "samplename")
-rownames(meta_ter_pca) <- rownames(meta_ter)
 ```
 
 #pathogen
@@ -182,7 +163,7 @@ path_sp
 #write.csv(path_sp, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/pathogen_Sp_all.csv"))
 ```
 
-#search Genus
+##search Genus
 
 ```{r}
 #summarize pathogen data
@@ -198,17 +179,13 @@ path_gs <- pathogen %>%
 ```
 
 ```{r}
-#positions of pathogens in tax table
 gs_in <- sapply(path_gs$Genus, charmatch, ps_ITS_gs@tax_table[, "Genus"], nomatch = NA)
 gs_in <- gs_in[!is.na(gs_in)]
-#remove NAs
 
-#pathogens detected in the phyllosphere of C. japonica
 path_gs[sapply(names(gs_in), charmatch, path_gs$Genus), ]
 #47 pathogenic Genera were also in microbiome data
-#extract ASV names for these pathogens
+#extract these ASVs
 gs_asv <- rownames(ps_ITS_gs@tax_table[gs_in, ])
-#add ASV name to pathogen list
 path_gs$ASV <- NULL
 path_gs$ASV[sapply(names(gs_in), grep, path_gs$Genus)] <- gs_asv
 
@@ -226,64 +203,37 @@ save(ps_ITS_path, ps_ITS_ter_path, file = paste0(path_out, "/231202_Sugi_phyllos
 ```
 
 #GLM
+##each guild
 
 ```{r}
-path_gs <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/pathogen_Gs_all.csv"))
+path_gs <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/pathogen_Gs.csv"))
 path_gs <- column_to_rownames(path_gs, var = "X")
-load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/phyloseq_pathogen_all.Rdata"))
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/phyloseq_pathogen.Rdata"))
 
-#show prediction and CI for the model with the total abundance tested on PC1_clim
-path_total <- apply(ps_ITS_path@otu_table, 1, sum)
-abund_plot <- data.frame(metadata, path_total)
-model_p <- glm2(path_total~site + PC1_clim + PC2_clim, 
-                data = abund_plot, 
-                family = poisson(link = "log"))
-summary(model_p)
-#climatic PC1 was negatively correlated with the aggregated relative abundance of putative pathogenic fungal genera
-#relative abundance of pathogens was lower at Tsukuba
+abund_ga <- cbind(abund_guild, metadata) %>% 
+  dplyr::select(c(ASV2153:ASV7510, site, latitude, PC1_clim, PC2_clim)) %>% 
+  pivot_longer(!site:PC2_clim, names_to = "ASV", values_to = "abundance")
 
-model_nb <- glm.nb(path_total~site + PC1_clim + PC2_clim, 
-                   data = abund_plot, 
-                   link = "log")
-summary(model_nb)
-#no variables were detected as significant when negative binomial distribution was used
-```
+#fix the name of the guilds
+guild <- rownames_to_column(data.frame(ps_ITS_guild1@tax_table[, 1]), var = "ASV")
+guild$col <- c("seagreen2", "brown", "blue3", "grey40", "tomato", "violetred", "pink")
+guild$order <- c(7, 6, 2, 5, 3, 4, 1)
+#remove double space
+guild$FuncType <- sub("  ", " ", guild$FuncType)
+#capitalyze the first letter
+guild$FuncType <- gsub("(^)([[:alpha:]])", "\\1\\U\\2", guild$FuncType, perl=TRUE)
 
-##Residual plot (needed to check the validity of the assumed distribution?)
 
-```{r}
-#Check if there is any trend in residual plot
-#Any trend in a residual plot indicates a violation of the model assumption?
-checkdata <- data.frame(abund_plot, lambda_pred = predict(model_p))
-checkdata  <- checkdata %>%
-  dplyr::select(PC1_clim, PC2_clim, site, path_total, lambda_pred) %>%
-  mutate(log_path = log(path_total + 1), residual = log_path - lambda_pred)
+abund_ga <- left_join(abund_ga, guild, by = "ASV")
+#show "Unknown" at the last
+abund_ga$FuncType <- factor(abund_ga$FuncType, 
+                            levels = c(unique(abund_ga$FuncType)[-grep("Unknown", 
+                                                                       unique(abund_ga$FuncType))], 
+                                       "Unknown"))
 
-ggplot(data = checkdata, mapping = aes(x = lambda_pred, y = residual)) + 
-  geom_point() + theme_classic()
 
-#autoplot shows various plots 
-autoplot(model_p)
-#samples with high relative abundance of pathogens are not fitted to poisson distribution
-```
-
-```{r}
-#negative binomial
-model_nb <- glm.nb(path_total~site + PC1_clim + PC2_clim, 
-                   data = abund_plot, 
-                   link = "log")
-
-checknb <- data.frame(abund_plot, lambda_pred = predict(model_nb))
-checknb  <- checknb %>%
-  dplyr::select(PC1_clim, PC2_clim, site, path_total, lambda_pred) %>%
-  mutate(log_path = log(path_total + 1), residual = log_path - lambda_pred)
-
-ggplot(data = checknb, mapping = aes(x = lambda_pred, y = residual)) + 
-  geom_point() + theme_classic()
-
-autoplot(model_nb)
-#outliers with the high relative abundance of pathogens are well fitted to negative binomial distribution
-#zeros are not well fitted to negative binomial distribution
+ps_ITS_guild1@tax_table[, "FuncType"]
+ps_ITS_guild2@tax_table[, "FuncType2"]
 ```
 
 ##mytheme
@@ -301,79 +251,112 @@ mytheme <-theme(text = element_text(color = "black"),
 ##plot
 
 ```{r}
-#estimate confidence intervals for model coefficients
-##confidence intervals are calculated as 
-##low = predict - qnorm(0.975) * predict$se.fit, high = predict + qnorm(0.975) * predict$se.fit
-preddata <- ggpredict(model_p, terms = c("PC1_clim", "site"))
+#show prediction and CI for the model with the total abundance tested on PC1_clim
+path_total <- apply(ps_ITS_guild@otu_table, 1, sum)
+model_p <- glm.nb(path_total~PC1_clim, data = metadata, link = log)
+new_data <- data.frame(PC1_clim = seq(min(abund_ga$PC1_clim), 
+                                      max(abund_ga$PC1_clim), 
+                                      length.out = 100))
+pred <- predict(model_p, newdata = new_data, type = "link", se.fit = TRUE)
+crit <- qnorm(0.975)  # For 95% confidence intervals
+
+new_data$fit <- exp(pred$fit)
+new_data$lower <- exp(pred$fit - crit * pred$se.fit)
+new_data$upper <- exp(pred$fit + crit * pred$se.fit)
+
+#change the order of samples to show leaf rot fungi at the top
+abund_plot <- abund_ga %>% arrange(order)
 
 p_path <- ggplot(data = abund_plot, 
-                 mapping = aes(x = PC1_clim, y = path_total, color = site)) +
-  geom_point() +
-  scale_color_viridis_d() + 
-  geom_line(data = preddata, 
-            aes(x = x, y = predicted, color = group), 
-            linewidth = 0.4) +
-  geom_ribbon(data = preddata, 
-              aes(x = x, ymin = conf.low, ymax = conf.high, y = predicted, fill = group),
-              alpha = 0.1, linewidth = 0, color = NA) +
-  scale_fill_discrete(breaks = "group", name = NULL) +
-  theme_classic(base_size = 12) + mytheme +
-  xlab("Climatic PC1") + ylab("Abundance of the putative pathogenic fungi after rarefaction") + labs(color = "Site") + NULL
+                 mapping = aes(x = PC1_clim, y = abundance, color = FuncType)) + 
+  scale_color_manual(values = guild$col[sapply(levels(abund_ga$FuncType), grep, guild$FuncType)]) + 
+  geom_line(data = new_data, aes(y = fit), linewidth = 0.7, color = "black") +
+  geom_ribbon(data = new_data, 
+              aes(ymin = lower, ymax = upper, y = fit),
+              alpha = 0.05, linewidth = 0, color = NA, fill = "black") +
+  geom_point() + 
+  theme_classic() + mytheme +
+  xlab("Climatic PC1") + ylab("Abundance of the putative pathogenic fungi after rarefaction") + labs(color = "Functional group") + NULL
   
 show(p_path)
 
-ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/pathogen_climate1_All.pdf"), 
+ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/pathogen_climate1.pdf"), 
+       plot = p_path, 
+       dpi = 300, width = 160, height = 90, units = "mm")
+#white, fruit rot fungi seemed to be abundant on saplings from warm region
+```
+
+```{r}
+p_path <- ggplot(data = abund_ga, 
+                 mapping = aes(x = PC2_clim, y = abundance, color = FuncType)) + 
+  geom_point() + 
+  scale_color_manual(values = guild$col[sapply(levels(abund_ga$FuncType), grep, guild$FuncType)]) + 
+  theme_classic() + mytheme +
+  xlab("Climatic PC2") + ylab("Abundance after rarefaction") + labs(color = "Guild", shape = "Site")
+  
+
+show(p_path)
+
+ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/pathogen_climate2.png"), 
        plot = p_path, 
        dpi = 300, width = 160, height = 90, units = "mm")
 ```
 
+#total pathogen abundance
+
 ```{r}
-preddata2 <- ggpredict(model_p, terms = c("PC2_clim", "site"))
+path_total <- apply(ps_ITS_path@otu_table, 1, sum)
 
-p_path <- ggplot(data = abund_plot, 
-                 mapping = aes(x = PC2_clim, y = path_total, color = site)) +
-  geom_point() +
-  scale_color_viridis_d() + 
-  geom_line(data = preddata2, 
-            aes(x = x, y = predicted, color = group), 
-            linewidth = 0.4) +
-  geom_ribbon(data = preddata2, 
-              aes(x = x, ymin = conf.low, ymax = conf.high, y = predicted, fill = group),
-              alpha = 0.1, linewidth = 0, color = NA) +
-  scale_fill_discrete(breaks = "group", name = NULL) +
-  theme_classic(base_size = 12) + mytheme +
-  xlab("Climatic PC2") + ylab("Abundance of the putative pathogenic fungi after rarefaction") + labs(color = "Site") + NULL
-  
-show(p_path)
+plot(metadata$PC1_clim, path_total, col = metadata$site)
 
-#ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/pathogen_climate2_all.png"), 
-#       plot = p_path, 
-#       dpi = 300, width = 160, height = 90, units = "mm")
+model_total <- glm.nb(path_total~site + PC1_clim + PC2_clim, 
+                      data = metadata, link = log)
+model_total2 <- glm2(path_total~site + PC1_clim + PC2_clim, 
+                     data = metadata, family = poisson(link = "log"))
+summary(model_total)
+summary(model_total2)
+summ_tot <- summary(model_total)
+
+#abundance of pathogens were associated with climate(negatively with warmth) at distributions of host cedar populations
 ```
 
-#GLM_terpene
+#adjusted p value
 
 ```{r}
-#show prediction and CI for the model with the total abundance tested on PC1_clim
-path_total_ter <- apply(ps_ITS_ter_path@otu_table, 1, sum)
-abund_ter <- meta_ter_pca
-abund_ter$path_total_ter <- path_total_ter
-model_p <- glm2(path_total_ter~PC3, 
-                data = abund_ter, 
-                family = poisson(link = "log"))
-summary(model_p)
-#Any variables tend to be detected as significant when a poisson distribution is assumed
+#bind up all test results
+df_total <- cbind(pathogen = "all", 
+                  call = paste(summ_tot[["call"]], collapse = ", "), 
+                  summ_tot[["coefficients"]], 
+                  aic = summ_tot[["aic"]])
 
-model_nb <- glm.nb(path_total_ter~PC3, 
-                   data = abund_ter, 
-                   link = "log")
-summary(model_nb)
-#no variables were detected as significant when negative binomial distribution was used
+df_list <- list()
+for (i in 1:length(summary)) {
+  df_list[[i]] <- cbind(pathogen = names(summary[i]), 
+                      call = paste(summary[[i]][["call"]], collapse = ", "), 
+                      summary[[i]][["coefficients"]], 
+                      aic = summary[[i]][["aic"]])
+  rownames(df_list[[i]]) <- paste0(rownames(df_list[[i]]), "_", 
+                                   names(summary[i]))
+}
+
+df_res <- rbind(df_total, do.call("rbind", df_list))
 ```
 
 ```{r}
-autoplot(model_p)
-autoplot(model_nb)
-```
+#calculate adjusted p value
+#remove values for intercepts (which are not tested here)
+df_res_adjust <- df_res[-grep("Intercept", rownames(df_res)), ]
+df_res_adjust <- df_res_adjust[-grep("brown2", rownames(df_res_adjust)), ]
 
+df_res_adjust <- cbind(df_res_adjust, 
+                       p_adj = p.adjust(df_res_adjust[, "Pr(>|z|)"], method = "BH"))
+
+#brown rot fungi were abundant at Kawatabi
+#pathogens with unknown guild were absent on all saplings at Tsukuba
+#trunk rot pathogens were absent on all saplings at Kawatabi
+
+#save results
+write.csv(df_res, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/glm_pathogen.csv"))
+write.csv(df_res_adjust, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/glm_pathogen_adj.csv"))
+```
 

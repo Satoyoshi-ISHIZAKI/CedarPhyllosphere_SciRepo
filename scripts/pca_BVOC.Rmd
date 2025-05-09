@@ -128,7 +128,7 @@ p_BVOC <- p_BVOC + mytheme +
         axis.text.x = element_blank())
 show(p_BVOC)
 
-ggsave(plot = p_BVOC, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_BVOC.pdf"), 
+ggsave(plot = p_BVOC, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_BVOC.png"), 
        dpi = 300, width = 160, height = 80, units = "mm")
 ```
 
