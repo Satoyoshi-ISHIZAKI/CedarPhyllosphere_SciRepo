@@ -1,8 +1,10 @@
 #install packages needed (not via "install.packages")
 
+install.packages("lmtest")
 install.packages("ggnewscale")
 install.packages("gtsummary")
 install.packages("webshot2")
+install.packages("ggeffects")
 
 ##Bioconductor
 if (!require("BiocManager", quietly = TRUE))
