@@ -1,0 +1,212 @@
+---
+title: "BVOC_ILRandPCA_gram"
+output: html_document
+date: "2025-02-27"
+---
+
+Perform log-ratio transformation and PCA on gram-based data
+
+#load
+
+```{r}
+library(readxl)
+library(phyloseq)
+library(tidyverse)
+library(ggfortify)
+library(RColorBrewer)
+```
+
+#path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+#create "path" file, and define "path" as your raw-data directory(character vector) in the file
+#"path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+#source codes
+
+```{r}
+#source("../R/label.R")
+#source("../R/greek_as_alphabet.R")
+```
+
+#theme settings
+
+```{r}
+#theme settings
+mytheme <-theme(text = element_text(color = "black"), 
+                axis.text = element_text(color = "black"), 
+                legend.key.size = unit(8, "pt"), 
+                legend.spacing.x = unit(0, "mm"))
+```
+
+#import data
+
+```{r}
+load(file = paste0(path_out, "/data/Sugi/BVOC/phyloseq_Terpene_2007to2408_imp.Rdata"))
+load(file = paste0(path_out, "/data/Sugi/BVOC/Terpene_stored_K2007.Rdata"))
+
+#extract Yoshioka data
+
+ps_ter_imp3p <- tax_glom(ps_ter_imp, taxrank = "mol_weight")
+taxa_names(ps_ter_imp3p) <- c("Monoterpene", "Sesquiterpene", "Diterpene")
+```
+
+##merge heavy Terpene
+
+```{r}
+#The emitted sesquiterpenes and diterpenes are dominated by beta-Farnesene and ent-Kaurene
+#Thus, merge Sesquiterpene and Diterpene
+ps_ter_mergeHeavy <- merge_taxa(ps_ter_imp,
+                                taxa_names(ps_ter_imp)[tax_table(ps_ter_imp)[, "mol_weight"] == "Sesqui"],
+                                "beta-Farnesene")
+tax_table(ps_ter_mergeHeavy)["beta-Farnesene", "col"] <- tax_table(ps_ter_imp)["beta-Farnesene", "col"]
+ps_ter_mergeHeavy <- merge_taxa(ps_ter_mergeHeavy,
+                                taxa_names(ps_ter_mergeHeavy)[tax_table(ps_ter_mergeHeavy)[, "mol_weight"] == "Di"],
+                                "ent-Kaurene")
+tax_table(ps_ter_mergeHeavy)["ent-Kaurene", "col"] <- tax_table(ps_ter_imp)["ent-Kaurene", "col"]
+```
+
+#log-transform
+
+```{r}
+ps_ter_log <- transform_sample_counts(ps_ter_imp, log)
+ps_ter_log_mergeHeavy <- transform_sample_counts(ps_ter_mergeHeavy, log)
+
+#3 parts
+ps_ter_log3p <- transform_sample_counts(ps_ter_imp3p, log)
+```
+
+###Yoshioka data
+
+```{r}
+ps_Yoshioka_log <- subset_samples(ps_ter_log, Month == "2007")
+ps_Yoshioka_log_mergeHeavy <- subset_samples(ps_ter_log_mergeHeavy, Month == "2007")
+ps_Yoshioka_log3p <- subset_samples(ps_ter_log3p, Month == "2007")
+```
+
+#scatter plot
+##3 parts
+
+```{r}
+pldata_Yoshi3p <- data.frame(otu_table(ps_Yoshioka_log3p))
+pldata_Yoshi3p <- rownames_to_column(pldata_Yoshi3p, var = "sampleID")
+pldata_Yoshi3p <- left_join(pldata_Yoshi3p, data.frame(sample_data(ps_Yoshioka_log3p)), by = "sampleID")
+
+p_Yoshi_MS <- ggplot(data = pldata_Yoshi3p, aes(x = Monoterpene, y = Sesquiterpene, 
+                                            color = PC1_clim)) + 
+  geom_point(size = 3) +
+  theme_bw(base_size = 11) + mytheme +
+  scale_color_viridis_c()
+
+show(p_Yoshi_MS)
+
+#ggsave(p_Yoshi_MS, 
+#       file = paste0(path_out, "231202_Sugi_phyllosphere_June_16S/figures/BVOC/BVOC_log_2007_MS.pdf"), 
+#       width = 160, height = 120, unit = "mm", dpi = 300)
+```
+
+```{r}
+p_Yoshi_MD <- ggplot(data = pldata_Yoshi3p, aes(x = Monoterpene, y = Diterpene, 
+                                            color = PC1_clim)) + 
+  geom_point(size = 3) +
+  theme_bw(base_size = 11) + mytheme +
+  scale_color_viridis_c()
+
+show(p_Yoshi_MD)
+#ggsave(p_Yoshi_MD, 
+#       file = paste0(path_out, "231202_Sugi_phyllosphere_June_16S/figures/BVOC/BVOC_log_2007_MD.pdf"), 
+#       width = 160, height = 120, unit = "mm", dpi = 300)
+```
+
+##write transformed
+
+```{r}
+save(ps_Yoshioka_log_mergeHeavy, 
+     file = paste0(path_out, "/data/Sugi/BVOC/phyloseq_2007_log_mergeHeavy.Rdata"))
+save(ps_Yoshioka_log, 
+     file = paste0(path_out, "/data/Sugi/BVOC/phyloseq_2007_log.Rdata"))
+save(ps_Yoshioka_log3p, 
+     file = paste0(path_out, "/data/Sugi/BVOC/phyloseq_2007_log3p.Rdata"))
+```
+
+##PCA (merged)
+
+```{r}
+#extract data
+log_Yoshioka_mergeHeavy <- as.matrix(otu_table(ps_Yoshioka_log_mergeHeavy))
+log_Yoshioka <- as.matrix(otu_table(ps_Yoshioka_log))
+```
+
+```{r}
+pca_log_Yoshioka <- prcomp(log_Yoshioka, scale. = TRUE, center = TRUE)
+summary(pca_log_Yoshioka)
+pca_log_Yoshioka_mergeHeavy <- prcomp(log_Yoshioka_mergeHeavy, scale. = TRUE, center = TRUE)
+summary(pca_log_Yoshioka_mergeHeavy)
+plot(pca_log_Yoshioka)
+plot(pca_log_Yoshioka_mergeHeavy)
+
+save(pca_log_Yoshioka_mergeHeavy, 
+     file = paste0(path_out, "/data/Sugi/BVOC/pcalog_2007_mergeHeavy.Rdata"))
+save(pca_log_Yoshioka, 
+     file = paste0(path_out, "/data/Sugi/BVOC/pcalog_2007.Rdata"))
+```
+
+###plot
+
+```{r}
+#plot PC1, 2
+p_logpca12_Yoshioka_merHev <- autoplot(pca_log_Yoshioka_mergeHeavy,
+                                       data = data.frame(sample_data(ps_Yoshioka_log_mergeHeavy)),
+                                       color = "PC1_clim",
+                                       loadings = TRUE,
+                                       loadings.color = tax_table(ps_Yoshioka_log_mergeHeavy)[, "col"],
+                                       loadings.label = TRUE,
+                                       loadings.label.color = "black",
+                                       loadings.label.repel=TRUE) +
+  scale_color_viridis_c() +
+  coord_fixed(1) +
+  #xlim(-0.3, 0.3) + ylim(-0.3, 0.3) +
+  theme_classic(base_size = 12) + mytheme
+
+show(p_logpca12_Yoshioka_merHev)
+```
+
+
+**The heavy terpenes are negatively correlated with the major MTs, as the Ota data.**
+
+```{r}
+#plot PC2, 3
+p_logpca23_Yoshioka_merHev <- autoplot(pca_log_Yoshioka_mergeHeavy,
+                                       x = 2, y = 3,
+                                       loadings = TRUE,
+                                       data = data.frame(sample_data(ps_Yoshioka_log_mergeHeavy)),
+                                       color = "PC1_clim",
+                                       loadings.color = tax_table(ps_Yoshioka_log_mergeHeavy)[, "col"],
+                                       loadings.label = TRUE,
+                                       loadings.label.color = "black",
+                                       loadings.label.repel=TRUE) +
+  scale_color_viridis_c() +
+  coord_fixed(1) +
+  theme_classic(base_size = 12) + mytheme
+
+show(p_logpca23_Yoshioka_merHev)
+```
+
+```{r}
+show(p_logpca12_Yoshioka_merHev)
+show(p_logpca23_Yoshioka_merHev)
+##PC4 is affected by some outliers
+
+##save plots
+ggsave(p_logpca12_Yoshioka_merHev, 
+       file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/BVOC_logpca12_2007.pdf"), 
+       width = 160, height = 160, unit = "mm", dpi = 300)
+ggsave(p_logpca23_Yoshioka_merHev, 
+       file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/BVOC_logpca23_2007.pdf"), 
+       width = 160, height = 160, unit = "mm", dpi = 300)
+```
+
+**The overall trend is similar to that of Ota data. MTs(a-Pinene, Limonene) and SQTs&DTs are negatively correlated.**

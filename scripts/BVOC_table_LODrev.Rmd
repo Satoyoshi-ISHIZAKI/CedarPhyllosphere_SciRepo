@@ -1,0 +1,95 @@
+---
+title: "BVOC_table"
+output: html_document
+date: "2025-01-23"
+---
+
+#load packages
+
+```{r}
+library(readxl)
+library(tidyverse)
+library(gridExtra)
+library(grid)
+library(gtable)
+library(gt)
+library(webshot2)
+```
+
+#path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+#create "path" file, and define "path" as your raw-data directory(character vector) in the file
+#"path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+#source codes
+
+```{r}
+#source("../R/bestNMDS.R")
+source("../R/html_italic.R")
+source("../R/Greek.R")
+source("../R/md_italic.R")
+source("../R/gg_italic.R")
+source("../R/round_preserve_lod.R")
+```
+
+#read processed data
+
+```{r}
+#LOD revised data
+load(paste0(path_out, "/data/Sugi/BVOC/Terpene_emitted_2209to2408_LODrev.Rdata"))
+ter_molwei <- read.csv(paste0(path_out, "/data/Sugi/BVOC/Terpene_molwei_LODrev.csv"))
+ter_molwei <- column_to_rownames(ter_molwei, var = "X")
+ter_total_meta <- read.csv(paste0(path_out, "/data/Sugi/BVOC/Terpene_metadata_2007to2408_LODrev.csv"))
+ter_total_meta <- column_to_rownames(ter_total_meta, var = "X")
+ter_total_meta <- ter_total_meta %>%
+  mutate(IDmid = formatC(IDmid, width = 3, flag = "0"),
+         cloneID = formatC(cloneID, width = 2, flag = "0")) #add 0 to the head of IDmid and cloneID numbers
+```
+
+```{r}
+#extract the data of the emitted terpenes collected on 2023/06 by Ohta
+ter_2306 <- ter_Ohta[rownames(ter_Ohta) %in% ter_total_meta$sampleID[ter_total_meta$Month == "2306"], ]
+ter_2306$Samplename <- ter_total_meta$treeID[sapply(rownames(ter_2306), charmatch, rownames(ter_total_meta))]
+
+#arrange the order of the columns
+ter_2306 <- ter_2306 %>%
+  dplyr::select(Samplename, rownames(ter_molwei)[rownames(ter_molwei) %in% colnames(ter_2306)])
+
+#round to 3 decimal places
+# Apply the function "round_preserve_lod" to all columns
+ter_2306[, -1] <- apply(ter_2306[, -1], 2, sapply, round_preserve_lod, digits = 3)
+```
+
+#output basal emission table
+
+```{r}
+BVOC_tbl <- ter_2306
+
+BVOC_tbl <- BVOC_tbl %>% 
+  gt::gt() %>%
+  gt::tab_style(cell_text(weight = "bold"), locations = cells_column_labels(columns = everything())) %>%
+  gt::cols_label(`alpha-Pinene` = md("*α*-Pinene"), 
+                 `beta-Pinene` = md("*β*-Pinene"), 
+                 `alpha-Terpinene` = md("*α*-Terpinene"), 
+                 `beta-Farnesene` = md("*β*-Farnesene"), 
+                 `gamma-Terpinene` = md("*γ*-Terpinene"), 
+                 `para-Cymene` = md("*p*-Cymene"), 
+                 Methyl_salicylate = md("Methyl\nSalicylate"), 
+                 `beta-Caryophyllene` = md("*β*-Caryophyllene"),
+                 `ent-Kaurene` = md("*ent*-Kaurene")) %>%
+  cols_width(everything() ~ px(1800 / (ncol(ter_2306)+1))) %>%
+  tab_options(table.font.names = "Times New Roman", 
+              table.font.size = 10.5)
+
+show(BVOC_tbl)
+
+gtsave(BVOC_tbl, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/export/BVOC_BE_LODrev.png"), 
+       vwidth = 1890, vheight = 1417)
+gtsave(BVOC_tbl, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/export/BVOC_BE_LODrev.pdf"), 
+       vwidth = 1890, vheight = 1417)
+```
+

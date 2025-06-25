@@ -1,0 +1,260 @@
+---
+title: "BVOC_zComp"
+output: html_document
+date: "2025-02-24"
+---
+
+```{r}
+library(readxl)
+library(tidyverse)
+library(phyloseq)
+library(SummarizedExperiment)
+library(RColorBrewer)
+library(viridis)
+```
+
+#path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+#create "path" file, and define "path" as your raw-data directory(character vector) in the file
+#"path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+#source codes
+
+```{r}
+source("../R/greek_as_alphabet.R")
+```
+
+#read BVOC data
+##Ohta
+**LOD revised data**
+
+```{r}
+#read the data of stored and emitted BVOCs
+#use data from the following season
+##2022autumn_Tsukuba(2209), 2023spring_Tsukuba(23XX), 2023summer_KAWATABI(2306), 2024summer_Tsukuba(2408)
+##+2020Kawatabi(2006, Yoshioka)
+
+ter_T_2209 <- read_excel(path = paste0(path_out, "/data/Sugi/BVOC/BVOC_summary_LODrev_20250601.xlsx"),
+                         sheet = "2022autumn_Tsukuba")
+ter_T_2209 <- t(column_to_rownames(ter_T_2209, var = "terpene"))
+colnames(ter_T_2209) <- greek_as_alphabet(colnames(ter_T_2209))
+
+ter_T_23sp <- read_excel(path = paste0(path_out, "/data/Sugi/BVOC/BVOC_summary_LODrev_20250601.xlsx"),
+                         sheet = "2023spring_Tsukuba")
+ter_T_23sp <- t(column_to_rownames(ter_T_23sp, var = "terpene"))
+colnames(ter_T_23sp) <- greek_as_alphabet(colnames(ter_T_23sp))
+
+ter_K_2306 <- read_excel(path = paste0(path_out, "/data/Sugi/BVOC/BVOC_summary_LODrev_20250601.xlsx"),
+                         sheet = "2023summer_KAWATABI")
+ter_K_2306 <- t(column_to_rownames(ter_K_2306, var = "terpene"))
+colnames(ter_K_2306) <- greek_as_alphabet(colnames(ter_K_2306))
+
+ter_T_2408 <- read_excel(path = paste0(path_out, "/data/Sugi/BVOC/BVOC_summary_LODrev_20250601.xlsx"),
+                         sheet = "2024summer_Tsukuba")
+ter_T_2408 <- t(column_to_rownames(ter_T_2408, var = "terpene"))
+colnames(ter_T_2408) <- greek_as_alphabet(colnames(ter_T_2408))
+
+#add time to rownames
+rownames(ter_T_2209) <- paste0("T2209_", rownames(ter_T_2209))
+rownames(ter_T_23sp) <- paste0("T23sp_", rownames(ter_T_23sp))
+rownames(ter_K_2306) <- paste0("K2306_", rownames(ter_K_2306))
+rownames(ter_T_2408) <- paste0("T2408_", rownames(ter_T_2408))
+```
+
+##Yoshioka
+
+```{r}
+ter_K_2007 <- read_excel(path = paste0(path_out, "/data/Sugi/BVOC/200710_emitted_kawatabi_Yoshioka.xlsx"),
+                         sheet = "Sheet1",
+                         col_types = "text")
+ter_K_2007 <- column_to_rownames(ter_K_2007, var = "SampleID") %>%
+  dplyr::select(-Origin)
+rownames(ter_K_2007) <- paste0("K2007_", rownames(ter_K_2007))
+colnames(ter_K_2007) <- sub("p-", "para-", colnames(ter_K_2007))
+
+ter_K_2007_store <- read_excel(path = paste0(path_out, "/data/Sugi/BVOC/200710_stored_kawatabi_Yoshioka.xlsx"),
+                               sheet = "Sheet1",
+                               col_types = "text")
+ter_K_2007_store <- column_to_rownames(ter_K_2007_store, var = "SampleID") %>%
+  dplyr::select(-Origin)
+rownames(ter_K_2007_store) <- paste0("K2007_", rownames(ter_K_2007_store))
+colnames(ter_K_2007_store) <- sub("a-", "alpha-", colnames(ter_K_2007_store))
+```
+
+##molcular weight of the terpenes
+
+```{r}
+ter_molwei <- read_excel(path = paste0(path_out, "/data/Sugi/BVOC/BVOC_summary_LODrev_20250601.xlsx"),
+                         sheet = "LOD_method")
+ter_molwei$terpene <- greek_as_alphabet(ter_molwei$terpene)
+ter_molwei <- data.frame(ter_molwei, 
+                         Terpene = ter_molwei$terpene)
+#add alpha-Farnesene after beta-Farnesene
+ter_molwei <- ter_molwei %>%
+  dplyr::slice(1:grep("beta-Farnesene", terpene)) %>%
+  dplyr::add_row(terpene = "alpha-Farnesene",
+          LOD_ng = NA,
+          Method = "MS",
+          mol_weight = "Sesqui",
+          weight = 204.3,
+          Terpene = "alpha-Farnesene") %>% #add the row of alpha-Farnesene
+  dplyr::bind_rows(dplyr::slice(ter_molwei, (grep("beta-Farnesene", terpene)+1):n()))
+
+ter_molwei <- ter_molwei %>%
+  group_by(mol_weight) %>%
+  mutate(n = length(Terpene)) #count the number of terpenes with the same molecular weight
+ter_molwei$n
+
+ter_molwei <- column_to_rownames(ter_molwei, var = "terpene")
+```
+
+#Bind
+
+```{r}
+ter_K_2306 <- as.data.frame(ter_K_2306)
+ter_T_2209 <- as.data.frame(ter_T_2209)
+ter_T_23sp <- as.data.frame(ter_T_23sp)
+ter_T_2408 <- as.data.frame(ter_T_2408)
+
+#bind all emission data
+ter_total <- bind_rows(ter_K_2007, ter_K_2306, ter_T_2209, ter_T_23sp, ter_T_2408)
+
+#add "0" to the head of ID numbers
+##dataframe for rownames
+df_rownm <- matrix(nrow = nrow(ter_total), ncol = 4)
+for (i in 1:4) {
+  df_rownm[, i] <- sapply(str_split(rownames(ter_total), "_"), `[`, i) #extract the features from rownames
+}
+df_rownm[, 3] <- formatC(as.numeric(df_rownm[, 3]), width = 3, flag = "0") #add 0 to the head of cloneID numbers
+df_rownm[, 4] <- formatC(as.numeric(df_rownm[, 4]), width = 2, flag = "0") #add 0 to the head of ID numbers
+df_rownm <- as.data.frame(df_rownm)
+df_rownm <- df_rownm %>%
+  mutate(V4 = na_if(V4, "NA"))
+
+#re-paste the features while omitting NAs
+rownm <- apply(df_rownm, 1, function(x) paste0(x[!is.na(x)], collapse = "_"))
+
+#change rownames
+rownames(ter_total) <- rownm
+rownames(ter_K_2007_store) <- rownm[substr(rownm, 1, 5) == "K2007"]
+```
+
+```{r}
+#filter out beta-Ocimene and Methyl salicylate and alpha-Farnesene
+ter_total_pr <- ter_total %>%
+  dplyr::select(-`beta-Ocimene`, -Methyl_salicylate, -`alpha-Farnesene`)
+#drop samples with NAs
+ter_total_pr <- ter_total_pr %>%
+  drop_na()
+
+ter_Ohta <- ter_total[substr(rownames(ter_total), 1, 5) != "K2007", ]
+#filter out beta-Ocimene and alpha-Farnesene
+ter_Ohta <- ter_Ohta %>%
+  dplyr::select(-`beta-Ocimene`, -`alpha-Farnesene`)
+```
+
+##save data
+
+```{r}
+save(ter_total, 
+     file = paste0(path_out, "/data/Sugi/BVOC/Terpene_emitted_2007to2408_LODrev.Rdata"))
+save(ter_total_pr, 
+     file = paste0(path_out, "/data/Sugi/BVOC/Terpene_emitted_2007to2408_prune_LODrev.Rdata"))
+save(ter_Ohta, 
+     file = paste0(path_out, "/data/Sugi/BVOC/Terpene_emitted_2209to2408_LODrev.Rdata"))
+write.csv(ter_molwei, 
+          file = paste0(path_out, "/data/Sugi/BVOC/Terpene_molwei_LODrev.csv"))
+```
+
+#create metadata
+
+```{r}
+load(paste0(path_out, "/data/Sugi/BVOC/Terpene_emitted_2007to2408_LODrev.Rdata"))
+load(paste0(path_out, "/data/Sugi/BVOC/Terpene_emitted_2007to2408_prune_LODrev.Rdata"))
+load(paste0(path_out, "/data/Sugi/BVOC/Terpene_emitted_2209to2408_LODrev.Rdata"))
+ter_molwei <- read.csv(paste0(path_out, "/data/Sugi/BVOC/Terpene_molwei_LODrev.csv"))
+ter_molwei <- column_to_rownames(ter_molwei, var = "X")
+```
+
+```{r}
+site_code <- c(T = "Tsukuba", K = "Kawatabi")
+
+#make metadata dataframe
+ter_total_meta <- data.frame(
+  sampleID = rownm, 
+  Site = site_code[substr(rownames(ter_total), 1, 1)], 
+  Month = substr(rownames(ter_total), 2, 5), 
+  Population = sapply(str_split(rownames(ter_total), "_"), `[`, 2), 
+  treeID = sapply(str_split(rownames(ter_total), "_", 2), `[`, 2)
+)
+
+rownames(ter_total_meta) <- rownm
+
+#modify the data variables
+ter_total_meta <- ter_total_meta %>%
+  mutate(Population = replace(Population, Population == "AT", "SM")) %>% #replace "AT" with "SM"
+  mutate(subpop = Population,
+         IDmid = sapply(str_split(sampleID, "_"), `[`, 3), #extract subpopulation from sampleID
+         cloneID = sapply(str_split(sampleID, "_"), `[`, 4)) %>% #add subpopulation and cloneID
+  mutate(cloneID = replace_na(cloneID, "01")) %>% #replace NA cloneID with "01"
+  mutate(subpop = replace(subpop, subpop == "YK", "HN")) %>% #replace "YK" with "HN"
+  mutate(Population = replace(Population, 
+                              Population %in% c("YK", "HN", "LD", "ST"), 
+                              "YK")) %>% #replace "YK", "HN", "LD", "ST" with "YK"
+  mutate(treeID = paste(subpop, IDmid, cloneID, sep = "_")) #create treeID
+
+write.csv(ter_total_meta, file = paste0(path_out, "/data/Sugi/BVOC/Terpene_metadata_2007to2408_LODrev.csv"))
+```
+
+#Experiment object
+##merge with the environmental data for each population
+
+```{r}
+#population metadata
+meta_pop <- read_excel(paste0(path_out, "/data/Sugi/metadata_2306.xlsx"), sheet = "location")
+
+#result of PCA on climatic variables
+load(paste0(path_out, "/data/Sugi/pca_climate.Rdata"))
+df_pcaclim <- data.frame(pca_clim$x)
+colnames(df_pcaclim) <- paste0(colnames(df_pcaclim), "_clim")
+
+#merge population metadata and PCA result
+meta_pop <- cbind(meta_pop, df_pcaclim)
+meta_pop <- meta_pop %>%
+  mutate(Population = population) %>% dplyr::select(-population)
+
+#add the result of the climatic PCA to the metadata
+meta_merge <- left_join(ter_total_meta, meta_pop, by = "Population") %>%
+  dplyr::select(-c(mat, apr, cvmpr, sdmmt, hurs, pet, sub0pr, PC3_clim, PC4_clim, PC5_clim, PC6_clim, PC7_clim))
+
+rownames(meta_merge) <- rownames(ter_total_meta)
+```
+
+#make Experiment object
+
+```{r}
+#re-order terpene emission data based on molcular weight data
+ter_total_ps <- ter_total %>%
+  dplyr::select((rownames(ter_molwei)))
+
+#Exp obj
+exp_total <- SummarizedExperiment(assays = list(meas = ter_total_ps),
+                                  rowData = meta_merge,
+                                  colData = ter_molwei)
+
+#omit Yoshioka data and beta-Ocimene & alpha-Farnesene
+exp_Ohta <- exp_total[rowData(exp_total)$Month != "2007",
+                      !(colData(exp_total)$Terpene %in% c("beta-Ocimene", "alpha-Farnesene"))]
+#prune terpenes that were not detected in any samples
+exp_Ohta <- exp_Ohta[,apply(assay(exp_Ohta)!="<LOD", 2, any)]
+
+save(exp_total, 
+     file = paste0(path_out, "/data/Sugi/BVOC/exp_Terpene_2007to2408_LODrev.Rdata"))
+save(exp_Ohta, 
+     file = paste0(path_out, "/data/Sugi/BVOC/exp_Terpene_2209to2408_LODrev.Rdata"))
+```
+

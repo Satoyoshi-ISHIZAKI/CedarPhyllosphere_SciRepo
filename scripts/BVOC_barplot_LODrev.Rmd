@@ -1,0 +1,826 @@
+---
+title: "pca_BVOC"
+output: html_document
+date: "2024-10-10"
+---
+
+#load packages
+
+```{r}
+library(readxl)
+library(phyloseq)
+library(SummarizedExperiment)
+library(tidyverse)
+library(ggtext)
+library(RColorBrewer)
+library(viridis)
+library(dichromat)
+library(scales)
+library(grid)
+library(gridExtra)
+#do this only once
+#loadfonts()
+```
+
+#path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+#create "path" file, and define "path" as your raw-data directory(character vector) in the file
+#"path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+#source codes
+
+```{r}
+source("../R/label.R")
+source("../R/greek_as_alphabet.R")
+source("../R/plot_top_taxa.R")
+```
+
+#read processed data
+
+```{r import}
+ter_total_meta <- read.csv(paste0(path_outall, "/data/Sugi/BVOC/Terpene_metadata_2007to2408.csv"))
+ter_total_meta <- column_to_rownames(ter_total_meta, var = "X")
+
+#population metadata
+meta_pop <- read_excel(paste0(path_outall, "/data/Sugi/metadata_2306.xlsx"), sheet = "location")
+
+#result of PCA on climatic variables
+load(paste0(path_outall, "/data/Sugi/pca_climate.Rdata"))
+df_pcaclim <- data.frame(pca_clim$x)
+colnames(df_pcaclim) <- paste0(colnames(df_pcaclim), "_clim")
+
+#merge population metadata and PCA result
+meta_pop <- cbind(meta_pop, df_pcaclim)
+
+#change subpopulation ID to population ID
+ter_total_meta <-  ter_total_meta %>%
+  mutate(population = str_replace_all(Population,
+                           pattern = c(AT = "SM", HN = "YK", ST = "YK", LD = "YK")))
+
+#add the result of the climatic PCA to the metadata
+meta_merge <- left_join(ter_total_meta, meta_pop, by = "population") %>%
+  dplyr::select(-c(mat, apr, cvmpr, sdmmt, hurs, pet, sub0pr, PC3_clim, PC4_clim, PC5_clim, PC6_clim, PC7_clim))
+
+rownames(meta_merge) <- rownames(ter_total_meta)
+```
+
+```{r import}
+#BVOC data
+load(paste0(path_outall, "/data/Sugi/BVOC/Terpene_emitted_2007to2408.Rdata"))
+load(paste0(path_outall, "/data/Sugi/BVOC/Terpene_stored_K2007.Rdata"))
+ter_molwei <- read.csv(paste0(path_outall, "/data/Sugi/BVOC/Terpene_molcular-weight.csv"))
+ter_molwei <- column_to_rownames(ter_molwei, var = "X")
+
+#re-order terpene emission data based on molcular weight data
+ter_total <- ter_total %>%
+  dplyr::select((rownames(ter_molwei)))
+```
+
+##assign colors
+
+```{r}
+#assign colors to each molcular weight
+##13 monoterpene, 6 sesquiterpene, 2 diterpene
+col_mono <- viridis::magma(16)[4:16]
+col_sesqui <- viridis(10)[5:10]
+col_di <- viridis(10)[3:4]
+col_ter <- c(col_mono, col_sesqui, col_di)
+
+names(col_ter) <- ter_molwei$Terpene
+
+ter_molwei$col <- col_ter
+```
+
+```{r}
+#check for visibility to dichromats
+par(mfrow = c(4, 1), mar = c(0, 5, 0, 0))
+image(1:17, 1, matrix(1:17, 17),
+      col = col_ter, axes = FALSE,
+      xlab = "", ylab = "Original",
+      cex.lab = 2.5)
+CheckCol <- c("deutan", "protan", "tritan")
+########
+
+#conduct dichromat commands
+for(n in seq(CheckCol)){
+  
+  GetCol <- dichromat(col_ter, type = CheckCol[n])
+  #plot using base::imade commands
+  image(1:17, 1, matrix(1:17, 17),
+        col = GetCol, axes = FALSE,
+        xlab = "", ylab = CheckCol[n],
+        cex.lab = 2.5)
+}
+```
+
+The visibility decreases for dichromats, but they will still be able to distinguish Mono, Sesqui and Di-terpene. 
+
+##phyloseq
+
+```{r}
+ps_ter <- phyloseq(otu_table = otu_table(as.matrix(ter_total), taxa_are_rows = FALSE), 
+                   tax_table = tax_table(as.matrix(ter_molwei)), 
+                   sample_data(meta_merge))
+
+#omit Yoshioka data and beta-Ocimene
+ps_Ohta <- prune_samples(sample_data(ps_ter)[["Month"]] != "2007", ps_ter)
+ps_Ohta <- subset_taxa(ps_Ohta, Terpene!="beta-Ocimene")
+#prune terpenes that are not at all emitted
+ps_Ohta <- prune_taxa(taxa_sums(ps_Ohta) > 0, ps_Ohta)
+
+#save(ps_ter, 
+#     file = paste0(path_outall, "/data/Sugi/BVOC/phyloseq_Terpene_2007to2408.Rdata"))
+#save(ps_Ohta, 
+#     file = paste0(path_outall, "/data/Sugi/BVOC/phyloseq_Terpene_2209to2408.Rdata"))
+```
+
+```{r}
+#divide basal emission rates by molcular weights of the terpenes
+##basal emission rate (nmol gdw^-1 h^-1)
+ps_ter_mol <- ps_ter
+
+tb_ter <- as.matrix(otu_table(ps_ter_mol))
+#extract the molcular weight vector
+weight_ter <- as.numeric(as.matrix(tax_table(ps_ter_mol))[, "weight"])
+names(weight_ter) <- rownames(tax_table(ps_ter_mol))
+#arrange the vector according to the order in the terpene table
+weight_ter <- weight_ter[match(colnames(tb_ter), names(weight_ter))]
+
+#If taxa_are_rows = FALSE, transpose the terpene table
+#Then, divide it with the molcular weight vector, and re-transpose
+tb_ter_mol <- otu_table(t(t(tb_ter) / weight_ter), taxa_are_rows = FALSE)
+
+otu_table(ps_ter_mol) <- tb_ter_mol
+
+
+#with Ohta phyloseq
+ps_Ohta_mol <- ps_Ohta
+
+tb_Ohta <- as.matrix(otu_table(ps_Ohta_mol))
+#extract the molcular weight vector
+weight_Ohta <- as.numeric(as.matrix(tax_table(ps_Ohta_mol))[, "weight"])
+names(weight_Ohta) <- rownames(tax_table(ps_Ohta_mol))
+#arrange the vector according to the order in the terpene table
+weight_Ohta <- weight_Ohta[match(colnames(tb_Ohta), names(weight_Ohta))]
+
+#If taxa_are_rows = FALSE, transpose the terpene table
+#Then, divide it with the molcular weight vector, and re-transpose
+tb_Ohta_mol <- otu_table(t(t(tb_Ohta) / weight_Ohta), taxa_are_rows = FALSE)
+
+otu_table(ps_Ohta_mol) <- tb_Ohta_mol
+
+#save(ps_ter_mol, 
+#     file = paste0(path_outall, "/data/Sugi/BVOC/phyloseq_Terpene_2007to2408_mol.Rdata"))
+#save(ps_Ohta_mol, 
+#     file = paste0(path_outall, "/data/Sugi/BVOC/phyloseq_Terpene_2209to2408_mol.Rdata"))
+```
+
+#theme settings
+
+```{r}
+#theme settings
+mytheme <-theme(text = element_text(color = "black"), 
+                axis.text = element_text(color = "black"), 
+                legend.key.size = unit(8, "pt"), 
+                legend.spacing.x = unit(0, "mm"))
+```
+
+#Barplot of basal emission rate
+##all data
+
+```{r}
+#omit NA from phyloseq
+##prune beta-Ocimene and Methyl_salicylate from data
+ps_ter_pr <- subset_taxa(ps_ter, Terpene!="beta-Ocimene")
+ps_ter_pr <- subset_taxa(ps_ter_pr, Terpene!="Methyl_salicylate")
+##prune samples with NA
+ps_ter_pr <- prune_samples(!is.na(sample_sums(ps_ter_pr)), ps_ter_pr)
+
+#set the color of each terpene
+ter_col_all <- as.character(tax_table(ps_ter_pr)[, "col"])
+names(ter_col_all) <- as.character(tax_table(ps_ter_pr)[, "Terpene"])
+
+#elong the dataset
+ter_all_longer <- as.data.frame(otu_table(ps_ter_pr)) %>%
+  mutate(Sample = rownames(.)) %>%
+  pivot_longer(cols = -Sample, names_to = "Terpene", values_to = "emission")
+
+#add metadata
+meta_all <- data.frame(sample_data(ps_ter_pr)) %>%
+  mutate(Sample = rownames(.))
+
+ter_all_longer <-  ter_all_longer %>%
+  left_join(meta_all, by = "Sample")
+```
+
+```{r}
+#depict barplot
+p_ter_all <- ggplot(data = ter_all_longer, mapping = aes(x = Sample, y = emission, 
+                                                         fill = factor(Terpene, 
+                                                                       levels = names(ter_col_all)))) +
+  geom_bar(stat = "identity", position = "fill") +
+  facet_wrap(~Month, 
+             scales = "free_x") +
+  theme_classic(base_size = 11) + mytheme +
+  scale_fill_manual(values = ter_col_all) +
+  scale_y_continuous(labels = label_comma()) +
+  labs(fill = "Terpene") +
+  ylab("Relative basal emission rate") +
+  theme(text = element_text(color = "black"), 
+        strip.text = element_text(size = 6),
+        legend.title = element_text(size = 8), 
+        legend.text = element_markdown(size = 7),
+        axis.title.x = element_blank(), 
+        axis.text.x = element_text(size = 6, angle = 90))
+show(p_ter_all)
+
+ggsave(plot = p_ter_all, filename = paste0(path_out, "/figures/BVOC/BVOC_barrel_2007to2408.pdf"), 
+       dpi = 300, width = 160, height = 120, units = "mm")
+```
+
+```{r}
+###total basal emission rate
+p_tertot_all <- plot_bar(ps_ter_pr, fill = "mol_weight") +
+  geom_bar(aes(fill=mol_weight), stat="identity", position="stack") +
+  scale_fill_viridis_d(labels = c("Diterpene", "Monoterpene", "Sesquiterpene")) +
+  scale_y_continuous(labels = label_comma()) +
+  theme_classic(base_size = 11) + mytheme +
+  facet_wrap(~Month, 
+             scales = "free_x") +
+  labs(fill = "Terpene") +
+  ylab(expression(paste("Basal emission rate (ng ", {gdw^-1}, " ", {h^-1}, ")"))) +
+  theme(text = element_text(color = "black"), 
+        strip.text = element_text(size = 6),
+        legend.title = element_text(size = 8), 
+        legend.text = element_markdown(size = 7),
+        axis.title.x = element_blank(), 
+        axis.text.x = element_text(size = 6, angle = 90))
+
+show(p_tertot_all)
+
+ggsave(plot = p_tertot_all, filename = paste0(path_out, "/figures/BVOC/BVOC_barabs_2007to2408.pdf"), 
+       dpi = 300, width = 160, height = 120, units = "mm")
+```
+
+The difference in the basal emission rates is not easily understandable since one sample emitted a large amount of terpenes.
+Omit it from the bars.
+
+```{r}
+hist(sample_sums(ps_ter_pr))
+which(sample_sums(ps_ter_pr) > 100000)
+#AZ_018 in Kawatabi 23/06 emitted a vast amount of terpenes
+#omit this sample from the dataset
+ps_ter_pr_omit <- prune_samples(sample_sums(ps_ter_pr) <= 100000, ps_ter_pr)
+
+#arrange samples along with MT ratio
+ps_ter_MTratio <- tax_glom(ps_ter_pr_omit, "mol_weight")
+ps_ter_MTratio <- transform_sample_counts(ps_ter_MTratio, function(x) x / sum(x))
+ter_MTratio <- as.numeric(otu_table(ps_ter_MTratio)[, "Sabinene"])
+names(ter_MTratio) <- sample_names(ps_ter_MTratio)
+ter_MTratio <- sort(ter_MTratio)
+
+#elong the dataset
+ter_omit_longer <- as.data.frame(otu_table(tax_glom(ps_ter_pr_omit, "mol_weight"))) %>%
+  mutate(Sample = rownames(.)) %>%
+  pivot_longer(cols = -Sample, names_to = "Terpene", values_to = "emission")
+
+#add metadata
+meta_omit <- data.frame(sample_data(ps_ter_pr_omit)) %>%
+  mutate(Sample = rownames(.))
+
+ter_omit_longer <-  ter_omit_longer %>%
+  left_join(meta_omit, by = "Sample")
+
+ter_omit_longer$Sample <- factor(ter_omit_longer$Sample, levels = names(ter_MTratio))
+ter_omit_longer$Terpene <- factor(ter_omit_longer$Terpene, levels = c("ent-Kaurene", "Sabinene", "beta-Farnesene"))
+```
+
+
+```{r}
+p_tertot_all_omit <- ggplot(data = ter_omit_longer, 
+                            mapping = aes(x = Sample, y = emission, 
+                                          fill = Terpene)) +
+  geom_bar(aes(fill=Terpene), stat="identity", position="stack") +
+  scale_fill_viridis_d(labels = c("Diterpene", "Monoterpene", "Sesquiterpene")) +
+  scale_y_continuous(labels = label_comma()) +
+  theme_classic(base_size = 11) + mytheme +
+  xlab("Proportion of monoterpenes") + labs(fill = "Terpene") +
+  ylab(expression(paste("Basal emission rate (ng ", {gdw^-1}, " ", {h^-1}, ")"))) +
+  theme(text = element_text(color = "black"), 
+        strip.text = element_text(size = 6),
+        legend.title = element_text(size = 8), 
+        legend.text = element_markdown(size = 7),
+        axis.text.x = element_blank())
+
+show(p_tertot_all_omit)
+
+ggsave(plot = p_tertot_all_omit, filename = paste0(path_out, "/figures/BVOC/BVOC_barabs_2007to2408_MTorder.pdf"), 
+       dpi = 300, width = 160, height = 120, units = "mm")
+```
+
+The basal emittion rate of terpenes is constant regardless of the proportion of MTs?
+
+##Ohta data
+
+```{r}
+#set the color of each terpene
+ter_col_Ohta <- as.character(tax_table(ps_Ohta)[, "col"])
+names(ter_col_Ohta) <- as.character(tax_table(ps_Ohta)[, "Terpene"])
+
+#elong the dataset
+ter_Ohta_longer <- as.data.frame(otu_table(ps_Ohta)) %>%
+  mutate(Sample = rownames(.)) %>%
+  pivot_longer(cols = -Sample, names_to = "Terpene", values_to = "emission")
+
+#add metadata
+meta_Ohta <- data.frame(sample_data(ps_Ohta)) %>%
+  mutate(Sample = rownames(.))
+
+ter_Ohta_longer <-  ter_Ohta_longer %>%
+  left_join(meta_Ohta, by = "Sample")
+```
+
+```{r}
+#depict barplot
+p_ter <- ggplot(data = ter_Ohta_longer, mapping = aes(x = Sample, y = emission, 
+                                                       fill = factor(Terpene, 
+                                                                     levels = names(ter_col_Ohta)))) +
+  geom_bar(stat = "identity", position = "fill") +
+  facet_wrap(~Month, 
+             scales = "free_x") +
+  theme_classic(base_size = 11) + mytheme +
+  scale_fill_manual(values = ter_col_Ohta) +
+  scale_y_continuous(labels = label_comma()) +
+  labs(fill = "Terpene") +
+  ylab("Relative basal emission rate") +
+  theme(text = element_text(color = "black"), 
+        strip.text = element_text(size = 6),
+        legend.title = element_text(size = 8), 
+        legend.text = element_markdown(size = 7),
+        axis.title.x = element_blank(), 
+        axis.text.x = element_text(size = 6, angle = 90))
+show(p_ter)
+
+ggsave(plot = p_ter, filename = paste0(path_out, "/figures/BVOC/BVOC_barrel_2209to2408.pdf"), 
+       dpi = 300, width = 160, height = 120, units = "mm")
+```
+
+```{r}
+###total basal emission rate
+p_tertot <- plot_bar(ps_Ohta, fill = "mol_weight") +
+  geom_bar(aes(fill=mol_weight), stat="identity", position="stack") +
+  scale_fill_viridis_d(labels = c("Diterpene", "Monoterpene", "Sesquiterpene")) +
+  scale_y_continuous(labels = label_comma()) +
+  theme_classic(base_size = 11) + mytheme +
+  facet_wrap(~Month, 
+             scales = "free_x") +
+  labs(fill = "Terpene") +
+  ylab(expression(paste("Basal emission rate (ng ", {gdw^-1}, " ", {h^-1}, ")"))) +
+  theme(text = element_text(color = "black"), 
+        strip.text = element_text(size = 6),
+        legend.title = element_text(size = 8), 
+        legend.text = element_markdown(size = 7),
+        axis.title.x = element_blank(), 
+        axis.text.x = element_text(size = 6, angle = 90))
+
+ggsave(plot = p_tertot, filename = paste0(path_out, "/figures/BVOC/BVOC_barabs_2209to2408.pdf"), 
+       dpi = 300, width = 160, height = 120, units = "mm")
+```
+
+#Mol base
+##all
+
+```{r}
+#omit NA from phyloseq
+##prune beta-Ocimene and Methyl_salicylate from data
+ps_ter_mol_pr <- subset_taxa(ps_ter_mol, Terpene!="beta-Ocimene")
+ps_ter_mol_pr <- subset_taxa(ps_ter_mol_pr, Terpene!="Methyl_salicylate")
+##prune samples with NA
+ps_ter_mol_pr <- prune_samples(!is.na(sample_sums(ps_ter_mol_pr)), ps_ter_mol_pr)
+
+#set the color of each terpene
+ter_col_all <- as.character(tax_table(ps_ter_mol_pr)[, "col"])
+names(ter_col_all) <- as.character(tax_table(ps_ter_mol_pr)[, "Terpene"])
+
+#elong the dataset
+ter_all_mol_longer <- as.data.frame(otu_table(ps_ter_mol_pr)) %>%
+  mutate(Sample = rownames(.)) %>%
+  pivot_longer(cols = -Sample, names_to = "Terpene", values_to = "emission")
+
+#add metadata
+meta_all_mol <- data.frame(sample_data(ps_ter_mol_pr)) %>%
+  mutate(Sample = rownames(.))
+
+ter_all_mol_longer <-  ter_all_mol_longer %>%
+  left_join(meta_all_mol, by = "Sample")
+```
+
+```{r}
+#depict barplot
+p_ter_all_mol <- ggplot(data = ter_all_mol_longer, mapping = aes(x = Sample, y = emission, 
+                                                         fill = factor(Terpene, 
+                                                                       levels = names(ter_col_all)))) +
+  geom_bar(stat = "identity", position = "fill") +
+  facet_wrap(~Month, 
+             scales = "free_x") +
+  theme_classic(base_size = 11) + mytheme +
+  scale_fill_manual(values = ter_col_all) +
+  scale_y_continuous(labels = label_comma()) +
+  labs(fill = "Terpene") +
+  ylab("Relative basal emission rate") +
+  theme(text = element_text(color = "black"), 
+        strip.text = element_text(size = 6),
+        legend.title = element_text(size = 8), 
+        legend.text = element_markdown(size = 7),
+        axis.title.x = element_blank(), 
+        axis.text.x = element_text(size = 6, angle = 90))
+show(p_ter_all_mol)
+
+ggsave(plot = p_ter_all_mol, filename = paste0(path_out, "/figures/BVOC/BVOC_barrel_2007to2408_mol.pdf"), 
+       dpi = 300, width = 160, height = 120, units = "mm")
+```
+
+```{r}
+p_tertot_all_mol <- plot_bar(ps_ter_mol_pr, fill = "mol_weight") +
+  geom_bar(aes(fill=mol_weight), stat="identity", position="stack") +
+  scale_fill_viridis_d(labels = c("Diterpene", "Monoterpene", "Sesquiterpene")) +
+  scale_y_continuous(labels = label_comma()) +
+  theme_classic(base_size = 11) + mytheme +
+  facet_wrap(~Month, 
+             scales = "free_x") +
+  labs(fill = "Terpene") +
+  ylab(expression(paste("Basal emission rate (nmol ", {gdw^-1}, " ", {h^-1}, ")"))) +
+  theme(text = element_text(color = "black"), 
+        strip.text = element_text(size = 6),
+        legend.title = element_text(size = 8), 
+        legend.text = element_markdown(size = 7),
+        axis.title.x = element_blank(), 
+        axis.text.x = element_text(size = 6, angle = 90))
+
+ggsave(plot = p_tertot_all_mol, filename = paste0(path_out, "/figures/BVOC/BVOC_barabs_2007to2408_mol.pdf"), 
+       dpi = 300, width = 160, height = 120, units = "mm")
+```
+
+##Ohta
+```{r}
+#set the color of each terpene
+ter_col_Ohta <- as.character(tax_table(ps_Ohta)[, "col"])
+names(ter_col_Ohta) <- as.character(tax_table(ps_Ohta)[, "Terpene"])
+
+#elong the dataset
+ter_Ohta_mol_longer <- as.data.frame(otu_table(ps_Ohta_mol)) %>%
+  mutate(Sample = rownames(.)) %>%
+  pivot_longer(cols = -Sample, names_to = "Terpene", values_to = "emission")
+
+#add metadata
+meta_Ohta_mol <- data.frame(sample_data(ps_Ohta_mol)) %>%
+  mutate(Sample = rownames(.))
+
+ter_Ohta_mol_longer <-  ter_Ohta_mol_longer %>%
+  left_join(meta_Ohta_mol, by = "Sample")
+```
+
+```{r}
+#depict barplot
+p_ter_mol <- ggplot(data = ter_Ohta_mol_longer, mapping = aes(x = Sample, y = emission, 
+                                                       fill = factor(Terpene, 
+                                                                     levels = names(ter_col_Ohta)))) +
+  geom_bar(stat = "identity", position = "fill") +
+  facet_wrap(~Month, 
+             scales = "free_x") +
+  theme_classic(base_size = 11) + mytheme +
+  scale_fill_manual(values = ter_col_Ohta) +
+  scale_y_continuous(labels = label_comma()) +
+  labs(fill = "Terpene") +
+  ylab("Relative basal emission rate") +
+  theme(text = element_text(color = "black"), 
+        strip.text = element_text(size = 6),
+        legend.title = element_text(size = 8), 
+        legend.text = element_markdown(size = 7),
+        axis.title.x = element_blank(), 
+        axis.text.x = element_text(size = 6, angle = 90))
+show(p_ter)
+
+ggsave(plot = p_ter_mol, filename = paste0(path_out, "/figures/BVOC/BVOC_barrel_2209to2408_mol.pdf"), 
+       dpi = 300, width = 160, height = 120, units = "mm")
+```
+
+```{r}
+###total basal emission rate
+p_tertot_mol <- plot_bar(ps_Ohta_mol, fill = "mol_weight") +
+  geom_bar(aes(fill=mol_weight), stat="identity", position="stack") +
+  scale_fill_viridis_d(labels = c("Diterpene", "Monoterpene", "Sesquiterpene")) +
+  scale_y_continuous(labels = label_comma()) +
+  theme_classic(base_size = 11) + mytheme +
+  facet_wrap(~Month, 
+             scales = "free_x") +
+  labs(fill = "Terpene") +
+  ylab(expression(paste("Basal emission rate (nmol ", {gdw^-1}, " ", {h^-1}, ")"))) +
+  theme(text = element_text(color = "black"), 
+        strip.text = element_text(size = 6),
+        legend.title = element_text(size = 8), 
+        legend.text = element_markdown(size = 7),
+        axis.title.x = element_blank(), 
+        axis.text.x = element_text(size = 6, angle = 90))
+
+ggsave(plot = p_tertot_mol, filename = paste0(path_out, "/figures/BVOC/BVOC_barabs_2209to2408_mol.pdf"), 
+       dpi = 300, width = 160, height = 120, units = "mm")
+```
+
+#YET
+#pca
+
+```{r}
+#remove kaurene from dataframe
+#sapply(c("kaurene"), grep, colnames(BVOC_log_ps))
+pca_BVOC_log_rm <- prcomp(BVOC_2306_log[, -c(14)], 
+                          scale. = TRUE)
+summary(pca_BVOC_log_rm)
+
+#save(pca_BVOC_log_rm, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/pca_BVOC_2306_16S_log.Rdata"))
+```
+
+```{r}
+col_BVOC <- c(rep("green3", 12), "purple3", "blue3")
+col_pop <- colorRampPalette(c("dodgerblue", "orangered"))(3)
+
+p_pca <- autoplot(pca_BVOC_log_rm, 
+                  data = cbind(BVOC_2306_log[, -c(14)], 
+                               population = metadata$population), 
+                  x = 1, y = 2,
+                  color = "population", 
+                  scale = 1
+                  )
+
+#scale loading vectors
+#see https://rdrr.io/cran/ggfortify/src/R/plotlib.R
+loadings_sc <- data.frame(PC1 = pca_BVOC_log_rm$rotation[, 1], 
+                          PC2 = pca_BVOC_log_rm$rotation[, 2], 
+                          label = rownames(pca_BVOC_log_rm$rotation))
+scaler <- min(max(abs(p_pca$data$PC1)) / max(abs(loadings_sc$PC1)),
+              max(abs(p_pca$data$PC1)) / max(abs(loadings_sc$PC2)))
+
+loadings_sc[, 1:2] <- loadings_sc[, 1:2] * scaler * 0.8
+loadings_sc$label <- gg_italic(loadings_sc$label, "-")
+#adjustment for the label positions
+loadings_sc$xadj <- c(-0.07, -0.07, -0.07, -0.03, -0.07, -0.07, 0, -0.07, -0.07, -0.07, -0.07, 0, 0)
+loadings_sc$yadj <- c(-0.007, 0.14, 0.06, 0.015, 0.085, 0.013, -0.015, -0.048, 0.115, 0.0375, -0.072, -0.015, 0.02)
+
+p_pca <- p_pca + geom_segment(data = loadings_sc, 
+                              mapping = aes(x = 0, xend = PC1, y = 0, yend = PC2), 
+                              arrow = arrow(length = unit(2.0, "mm")), 
+                              color = col_BVOC[-14], 
+                              linewidth = 0.5) +
+  geom_text(data = loadings_sc, 
+            mapping = aes(x = PC1 + xadj, y = PC2 + yadj, label = label),
+            size = 5.5 * .352777778,
+            color = "black",
+            parse = TRUE) +
+  coord_fixed(ratio = 1) +
+  theme_classic(base_size = 11) +
+  labs(color = "Population") +
+  scale_color_manual(values = col_pop, labels = c("Ajigazawa", "Azouji", "Yakushima")) +
+  mytheme + theme(legend.position = "none")
+
+show(p_pca)
+
+ggsave(plot = p_pca, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/pca_BVOC_log.png"), 
+       dpi = 300, width = 160, height = 160, units = "mm")
+```
+
+#merge plot
+
+```{r}
+p_pca_none <- p_pca + theme(legend.position = "bottom", 
+                            legend.title = element_text(size = 7), 
+                            legend.text = element_text(size = 7))
+legend <- gtable_filter(ggplotGrob(p_pca_none), "guide-box")
+p_pca_none <- p_pca + theme(legend.position = "none")
+
+pl_BVOC <- arrangeGrob(p_BVOC, top = create_label("A"))
+pl_pca <- arrangeGrob(p_pca_none, top = create_label("B"))
+
+layout <- rbind(c(1, 2), c(1, 3))
+
+p_merge <- grid.arrange(pl_BVOC, pl_pca, legend, 
+                        layout_matrix = layout, 
+                        widths = c(5.5, 4.5), 
+                        heights = c(9, 1)
+                        )
+
+ggsave(plot = p_merge, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_BVOC_pca.png"), 
+       dpi = 300, width = 160, height = 80, units = "mm", scale = 1)
+
+#Don't do below command after editing with Inkscape
+#ggsave(plot = p_merge, filename = paste0(path_out, #"/231202_Sugi_phyllosphere_June_16S/figures/barplot_BVOC_pca1.pdf"), 
+#       dpi = 300, width = 160, height = 80, units = "mm", scale = 1, family = "Helvetica")
+```
+
+#LM (to test the correlations between latitude and BVOCs emission rates)
+
+```{r}
+#to test the differences of PC1, 2 among groups, perform ANOVA test
+#merge metadata and the result of PCA
+data_pca <- rownames_to_column(data.frame(pca_BVOC_log_rm$x))
+data_pca <- merge(metadata, data_pca, by.x = "samplename", by.y = "rowname")
+
+#merge log-transformed total basal emission rate
+df_total <- data.frame(total = BVOC_2306_total_log)
+df_total <- rownames_to_column(df_total)
+data_pca <- merge(data_pca, df_total, by.x = "samplename", by.y = "rowname")
+
+#merge BVOCs emission profile
+df_BVOC <- rownames_to_column(BVOC_2306_log)
+data_pca <- merge(data_pca, df_BVOC, by.x = "samplename", by.y = "rowname")
+
+#merge population metadata
+data_pca <- merge(data_pca, meta_pop, by.x = "population", by.y = "population", all.x = TRUE)
+```
+
+```{r}
+#full model (use PC1 and PC2 for climatic data)
+model_pc1_clim <- lm(PC1 ~ PC1_clim + PC2_clim, data = data_pca)
+model_pc2_clim <- lm(PC2 ~ PC1_clim + PC2_clim, data = data_pca)
+model_total_clim <- lm(total ~ PC1_clim + PC2_clim, data = data_pca)
+
+anova(model_pc1_clim)
+anova(model_pc2_clim)
+anova(model_total_clim)
+#none of the models are significant when both PC1 & PC2 included
+
+write.csv(anova(model_pc1_clim), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_pc1_glm_climtot.csv"))
+write.csv(anova(model_pc2_clim), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_pc2_glm_climtot.csv"))
+
+write.csv(anova(model_total_clim), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_total_glm_climtot.csv"))
+```
+
+##test multicollinearity
+
+```{r}
+vif(model_pc1_clim)
+#multicollinearity is not detected
+
+#perform model selection and compare results with one covariate models
+set.seed(123)
+selc_PC1_clim <- stepAIC(model_pc1_clim)
+selc_PC2_clim <- stepAIC(model_pc2_clim)
+selc_total_clim <- stepAIC(model_total_clim)
+#PC1 for climatic data was selected only for the terpene PC1 model
+```
+
+###climatic PC1
+
+```{r}
+#output models with climatic PC1 as an explanatory variable
+model_pc1_clim <- lm(PC1 ~ PC1_clim, data = data_pca)
+model_pc2_clim <- lm(PC2 ~ PC1_clim, data = data_pca)
+model_total_clim <- lm(total ~ PC1_clim, data = data_pca)
+
+write.csv(cbind(summary(model_pc1_clim)$coefficients, 
+                AIC = summary(model_pc1_clim)$aic), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_pc1_glm_clim.csv"))
+
+write.csv(cbind(summary(model_pc2_clim)$coefficients, 
+                AIC = summary(model_pc2_clim)$aic), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_pc2_glm_clim.csv"))
+
+write.csv(cbind(summary(model_total_clim)$coefficients, 
+                AIC = summary(model_total_clim)$aic), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_total_glm_clim.csv"))
+
+PC1clim <- rbind(summary(model_pc1_clim)$coefficient, 
+                 summary(model_pc2_clim)$coefficient, 
+                 summary(model_total_clim)$coefficient)
+rownames(PC1clim) <- paste0(rep(c("PC1", "PC2", "total"), each = 2),
+                            rep(c("Intercept", "PC1_clim"), 3)
+                            )
+```
+
+###climatic PC2
+
+```{r}
+#output models with climatic PC2 as an explanatory variable
+model_pc1_clim <- lm(PC1 ~ PC2_clim, data = data_pca)
+model_pc2_clim <- lm(PC2 ~ PC2_clim, data = data_pca)
+model_total_clim <- lm(total ~ PC2_clim, data = data_pca)
+
+write.csv(cbind(summary(model_pc1_clim)$coefficients, 
+                AIC = summary(model_pc1_clim)$aic), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_pc1_glm_clim2.csv"))
+
+write.csv(cbind(summary(model_pc2_clim)$coefficients, 
+                AIC = summary(model_pc2_clim)$aic), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_pc2_glm_clim2.csv"))
+
+write.csv(cbind(summary(model_total_clim)$coefficients, 
+                AIC = summary(model_total_clim)$aic), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_total_glm_clim2.csv"))
+
+PC2clim <- rbind(summary(model_pc1_clim)$coefficient, 
+                 summary(model_pc2_clim)$coefficient, 
+                 summary(model_total_clim)$coefficient)
+rownames(PC2clim) <- paste0(rep(c("PC1", "PC2", "total"), each = 2),
+                            rep(c("Intercept", "PC2_clim"), 3)
+                            )
+```
+
+##plot LM with climatic PCs
+
+```{r}
+#climatic PC1
+p_pc1pc1 <- ggplot(data = data_pca, mapping = aes(x = PC1_clim, y = PC1, color = population)) +
+  geom_smooth(method = "lm", color = "black", linewidth = .7, alpha = 0.1) +
+  geom_point() +
+  labs(x = "Climatic PC1", y = "Terpene PC1", color = "Population") +
+  scale_color_manual(values = col_pop, labels = c("Ajigasawa", "Azouji", "Yakushima")) +
+  theme_classic(base_size = 12) + mytheme +
+  NULL
+
+p_pc2pc1 <- ggplot(data = data_pca, mapping = aes(x = PC1_clim, y = PC2, color = population)) +
+  geom_point() +
+  labs(x = "Climatic PC1", y = "Terpene PC2", color = "Population") +
+  scale_color_manual(values = col_pop, labels = c("Ajigasawa", "Azouji", "Yakushima")) +
+  theme_classic(base_size = 12) + mytheme +
+  NULL
+
+#climatic PC2
+p_pc1pc2 <- ggplot(data = data_pca, mapping = aes(x = PC2_clim, y = PC1, color = population)) +
+  geom_smooth(method = "lm", color = "black", linewidth = .7, alpha = 0.1) +
+  geom_point() +
+  labs(x = "Climatic PC2", y = "Terpene PC1", color = "Population") +
+  scale_color_manual(values = col_pop, labels = c("Ajigasawa", "Azouji", "Yakushima")) +
+  theme_classic(base_size = 12) + mytheme +
+  NULL
+
+p_pc2pc2 <- ggplot(data = data_pca, mapping = aes(x = PC2_clim, y = PC2, color = population)) +
+  geom_point() +
+  labs(x = "Climatic PC2", y = "Terpene PC2", color = "Population") +
+  scale_color_manual(values = col_pop, labels = c("Ajigasawa", "Azouji", "Yakushima")) +
+  theme_classic(base_size = 12) + mytheme +
+  NULL
+
+show(p_pc1pc1)
+show(p_pc2pc1)
+show(p_pc1pc2)
+show(p_pc2pc2)
+```
+
+```{r}
+##arrange plots
+pl_pc2pc1 <- p_pc2pc1 + theme(legend.position = "bottom")
+legend <- gtable_filter(ggplotGrob(pl_pc2pc1), "guide-box")
+pl_pc1pc1 <- p_pc1pc1 + theme(legend.position = "none")
+pl_pc2pc1 <- p_pc2pc1 + theme(legend.position = "none")
+pl_pc1pc2 <- p_pc1pc2 + theme(legend.position = "none")
+pl_pc2pc2 <- p_pc2pc2 + theme(legend.position = "none")
+
+pl_pc1pc1 <- arrangeGrob(pl_pc1pc1, top = create_label("A"))
+pl_pc1pc2 <- arrangeGrob(pl_pc1pc2, top = create_label("B"))
+pl_pc2pc1 <- arrangeGrob(pl_pc2pc1, top = create_label("C"))
+pl_pc2pc2 <- arrangeGrob(pl_pc2pc2, top = create_label("D"))
+
+layout <- rbind(c(1, 2), c(3, 4), c(5, 5))
+
+p_lm <- grid.arrange(pl_pc1pc1, pl_pc1pc2, pl_pc2pc1, pl_pc2pc2, legend,
+                     layout_matrix = layout, widths = c(1, 1), heights = c(9, 9, 2))
+
+ggsave(plot = p_lm, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/LM_terpene_climate1.pdf"), 
+       dpi = 300, width = 160, height = 120, units = "mm", scale = 1)
+```
+
+##adjusted p value
+
+```{r}
+adjust <- rbind(PC1clim[c(2, 4), ], PC2clim[c(2, 4), ])
+adjust <- cbind(adjust, p_adj = p.adjust(adjust[, 4], method = "fdr"))
+```
+
+```{r}
+model_pc1 <- glm(PC1 ~ latitude, data = data_pca)
+model_pc2 <- glm(PC2 ~ latitude, data = data_pca)
+model_total <- glm(total ~ latitude, data = data_pca)
+
+summary(model_pc1)
+summary(model_pc2)
+summary(model_total)
+
+write.csv(cbind(summary(model_pc1)$coefficients, 
+                AIC = summary(model_pc1)$aic), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_pc1_glm.csv"))
+
+write.csv(cbind(summary(model_pc2)$coefficients, 
+                AIC = summary(model_pc2)$aic), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_pc2_glm.csv"))
+
+write.csv(cbind(summary(model_total)$coefficients, 
+                AIC = summary(model_total)$aic), 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/BVOC_total_glm.csv"))
+```
+

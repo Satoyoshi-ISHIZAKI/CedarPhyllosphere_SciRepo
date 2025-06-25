@@ -1,0 +1,205 @@
+---
+title: "NMDS"
+output: html_document
+date: "2024-10-10"
+---
+
+#load packages
+
+```{r}
+library(readxl)
+library(phyloseq)
+library(tidyverse)
+library(vegan)
+```
+
+#path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+#create "path" file, and define "path" as your raw-data directory(character vector) in the file
+#"path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+#source codes
+
+```{r}
+source("../R/bestNMDS.R")
+```
+
+#read processed data
+
+```{r import}
+#change "16S" to "ITS" to rarefy ITS data
+df_rarefied <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/df_rarefied_16S.csv"), row.names = 1)
+rownames(df_rarefied) <- formatC(as.numeric(rownames(df_rarefied)), width = 4, flag = "0") #add 0 to rownames
+
+tax_table <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/tax_table2_16S.csv"), row.names = 1)
+tax_table <- as.matrix(tax_table)
+
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/trees.Rdata"))
+
+metadata <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/metadata_2306.xlsx"), 
+                       sheet = "Sheet1")
+metadata <- column_to_rownames(metadata, var = "Sample_Name")
+metadata$cloneID <- as.factor(metadata$cloneID)
+metadata$population <- as.factor(metadata$population)
+metadata$site <- as.factor(metadata$site)
+metadata$date <- as.factor(metadata$date)
+```
+
+##ps_object
+
+```{r}
+ps <- phyloseq(otu_table(df_rarefied, taxa_are_rows = FALSE), 
+               tax_table(tax_table), 
+               phy_tree(tree_rarefied2$data), 
+               sample_data(metadata))
+```
+
+##Yoshioka data
+
+```{r}
+load(file = paste0(path_out, "/data/Sugi/BVOC/phyloseq_2007_log_mergeHeavy.Rdata"))
+```
+
+###**YET TO BE DONE**
+#average for each population
+**Both of the BVOC data(in 2020/07) and the microbiome data were collected from a few individuals.**
+**Thus, test the correlation between the means of the two data for each population.**
+
+```{r}
+#microbiome
+ps_K <- subset_samples(ps, site == "Kawatabi")
+#add 1 to otu table
+ps_K_pop <- transform_sample_counts(ps_K, function(x) {x + 1})
+#geometric mean for each population
+ps_K_pop <- merge_samples(ps_K_pop, group = "population", fun = function(x) mean(x))
+```
+
+#dist
+
+```{r dist}
+dist_bray <- vegdist(df_rarefied, method = "bray")
+dist_UF_wei <- UniFrac(ps, weighted = TRUE)
+dist_unUF <- UniFrac(ps, weighted = FALSE)
+```
+
+#NMDS_bray
+
+```{r bray, cache=TRUE, dependson="dist"}
+#perform NMDS, starting from such a seed as to generate the lowest stress value 
+nmds_bray <- bestNMDS(dist_bray)
+```
+
+```{r}
+stressplot(nmds_bray$nmds)
+nmds_bray$nmds$stress
+#save(nmds_bray, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/NMDS_bray_16S.Rdata"))
+```
+
+##dataframe to draw a figure
+
+```{r}
+df_nmds <- data.frame(metadata, nmds_bray$nmds$points)
+
+#assign numbers to each population along with its latitude
+replace_rule <- c("AJ"=1, "NB"=2, "YM"=3, "IS"=4, "DN"=5, "BJ"=6, "AS"=7, "OK"=8, "TY"=9, "AZ"=10, "SM"=11, "KW"=12, "SN"=13, "YK"=14) 
+pop_num <- as.character(df_nmds$population)
+pop_num <- unlist(lapply(pop_num, function(x) replace_rule[x]))
+#set (site * population) levels
+fac_sipop <- as.factor(paste0(df_nmds$site, LETTERS[pop_num]))
+#assign colors to each element
+col_sipop <- c(alpha("orange3", seq(0.5, 1, 
+                                    length.out = nlevels(as.factor(pop_num)))), 
+               alpha("blue", seq(0.5, 1, 
+                                 length.out = nlevels(as.factor(pop_num))))
+               )
+```
+
+
+```{r}
+p_nmds <- ggplot(data = df_nmds, 
+                 mapping = aes(x = MDS1, y = MDS2, color = fac_sipop))
+p_nmds <- p_nmds + theme_classic()
+p_nmds <- p_nmds + coord_fixed(1)
+p_nmds <- p_nmds + xlim(-2.5, 2) + ylim(-2, 2.5)
+p_nmds <- p_nmds + scale_color_manual(values = col_sipop)
+p_nmds <- p_nmds + geom_text(aes(label = names(pop_num)), 
+                             size = 5)
+p_nmds <- p_nmds + annotate("text", 
+                            x = 1.35, y = -1.5, size = 6, 
+                            label = paste0("stress = ", 
+                                           round(nmds_bray$nmds$stress, digits = 4)))
+p_nmds <- p_nmds + theme(legend.position = "none", 
+                         text = element_text(size = 15, family="sans"))
+p_nmds
+ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/NMDS_bray_wide.png"), 
+       plot = p_nmds, dpi = 400, width = 150, height = 150, units = "mm")
+```
+
+#NMDS_weightedUF
+
+```{r UF, cache=TRUE, dependson="dist"}
+nmds_UF <- bestNMDS(dist_UF_wei)
+```
+
+```{r}
+stressplot(nmds_UF$nmds)
+nmds_UF$nmds$stress
+#save(nmds_UF, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/NMDS_weightedUF_16S.Rdata"))
+```
+
+##dataframe to draw a figure
+
+```{r}
+df_nmds <- data.frame(metadata, nmds_UF$nmds$points)
+
+#assign numbers to each population along with its latitude
+replace_rule <- c("AJ"=1, "NB"=2, "YM"=3, "IS"=4, "DN"=5, "BJ"=6, "AS"=7, "OK"=8, "TY"=9, "AZ"=10, "SM"=11, "KW"=12, "SN"=13, "YK"=14) 
+pop_num <- as.character(df_nmds$population)
+pop_num <- unlist(lapply(pop_num, function(x) replace_rule[x]))
+#set (site * population) levels
+fac_sipop <- as.factor(paste0(df_nmds$site, LETTERS[pop_num]))
+#assign colors to each element
+col_sipop <- c(alpha("orange3", seq(0.5, 1, 
+                                    length.out = nlevels(as.factor(pop_num)))), 
+               alpha("blue", seq(0.5, 1, 
+                                 length.out = nlevels(as.factor(pop_num))))
+               )
+```
+
+
+```{r}
+p_nmds <- ggplot(data = df_nmds, 
+                 mapping = aes(x = MDS1, y = MDS2, color = fac_sipop))
+p_nmds <- p_nmds + theme_classic()
+p_nmds <- p_nmds + coord_fixed(1)
+p_nmds <- p_nmds + xlim(-0.12, 0.025) + ylim(-0.03, 0.115)
+p_nmds <- p_nmds + scale_color_manual(values = col_sipop)
+p_nmds <- p_nmds + geom_text(aes(label = names(pop_num)), 
+                             size = 5)
+p_nmds <- p_nmds + annotate("text", 
+                            x = -0.01, y = -0.02, size = 6, 
+                            label = paste0("stress = ", 
+                                           round(nmds_UF$nmds$stress, digits = 5)))
+p_nmds <- p_nmds + theme(legend.position = "none", 
+                         text = element_text(size = 15, family="sans"))
+p_nmds
+ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/NMDS_UF_wide.png"), 
+       plot = p_nmds, dpi = 400, width = 150, height = 150, units = "mm")
+```
+
+#NMDS_unUF
+
+```{r}
+nmds_unUF <- bestNMDS(dist_unUF)
+```
+
+```{r}
+stressplot(nmds_unUF$nmds)
+nmds_unUF$nmds$stress
+save(nmds_unUF, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/NMDS_unweightedUF_16S.Rdata"))
+```
+

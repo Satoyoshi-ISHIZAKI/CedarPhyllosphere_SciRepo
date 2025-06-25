@@ -5,6 +5,8 @@ install.packages("ggnewscale")
 install.packages("gtsummary")
 install.packages("webshot2")
 install.packages("ggeffects")
+install.packages("ggtern")
+install.packages("chromote")
 
 ##Bioconductor
 if (!require("BiocManager", quietly = TRUE))
@@ -45,3 +47,9 @@ install.packages("XLConnect")
 #readGenAlEx
 install.packages("devtools")
 devtools::install_github("douglasgscofield/readGenalex")
+
+#SummarizedExperiment
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+BiocManager::install("SummarizedExperiment")
