@@ -22,9 +22,7 @@ library(gridExtra)
 library(gtable)
 library(grid)
 library(ggtext)
-
-#do this only once
-#loadfonts()
+library(SummarizedExperiment)
 ```
 
 #path to raw-data directory (change "path" to your raw-data directory)
@@ -47,6 +45,23 @@ source("../R/round_preserve_lod.R")
 ```
 
 #read processed data
+
+```{r}
+#read VOC data
+load(file = paste0(path_out, "/data/Sugi/BVOC/exp_Terpene_2209to2408_LODrev_nolod.Rdata"))
+load(file = paste0(path_out, "/data/Sugi/BVOC/exp_Terpene_2209to2408_LODrev_log.Rdata"))
+
+#extract the data for June 2023
+BVOC_2306 <- exp_Ohta_nolod %>% subset(Month == "2306")
+BVOC_2306_log <- exp_Ohta_log %>% subset(Month == "2306")
+#microbial samples for AJ_002_1 and AZ_004_1 were not collected, so remove them
+BVOC_2306 <- BVOC_2306 %>% subset(!(treeID %in% c("AJ_002_01", "AZ_004_01")))
+BVOC_2306_log <- BVOC_2306_log %>% subset(!(treeID %in% c("AJ_002_01", "AZ_004_01")))
+
+#Longifolene is not detected in the June 2023 samples, so remove it
+BVOC_2306 <- BVOC_2306[, -which(colnames(BVOC_2306) == "Longifolene")]
+BVOC_2306_log <- BVOC_2306_log[, -which(colnames(BVOC_2306_log) == "Longifolene")]
+```
 
 ```{r import}
 metadata <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/metadata_16S_BVOC.csv"), row.names = 1)
@@ -95,12 +110,19 @@ mytheme <-theme(text = element_text(color = "black"),
 
 ```{r}
 #gather the emission data before plotting
-BVOC_2306_ga <- rownames_to_column(BVOC_2306, var = "ID")
-BVOC_2306_ga <- cbind(population = metadata$population, BVOC_2306_ga)
-BVOC_2306_ga <- gather(BVOC_2306_ga, "BVOC", "emission", c(-ID, -population))
+BVOC_2306_ga <- rownames_to_column(assay(BVOC_2306), var = "sampleID")
+BVOC_2306_ga <- full_join(BVOC_2306_ga,
+                          data.frame(rowData(BVOC_2306)) %>% dplyr::select(sampleID, Population),
+                          by = "sampleID")
+BVOC_2306_ga <- pivot_longer(BVOC_2306_ga,
+                             cols = -c(sampleID, Population),
+                             names_to = "BVOC",
+                             values_to = "emission")
 
 labeller <- c(AJ = "Ajigasawa", AZ = "Azouji", YK = "Yakushima")
-
+```
+#YET TO BE DONE
+```{r}
 #assign colors to each terpene
 col_BVOC <- c(colorRampPalette(c("green2", "grey30", "yellow2"))(12), 
               "purple3", "blue3")

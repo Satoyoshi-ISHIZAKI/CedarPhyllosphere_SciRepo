@@ -26,6 +26,7 @@ source("../scripts/path.R")
 
 ```{r}
 source("../R/greek_as_alphabet.R")
+source("../R/round_preserve_lod.R")
 ```
 
 #read BVOC data
@@ -256,5 +257,55 @@ save(exp_total,
      file = paste0(path_out, "/data/Sugi/BVOC/exp_Terpene_2007to2408_LODrev.Rdata"))
 save(exp_Ohta, 
      file = paste0(path_out, "/data/Sugi/BVOC/exp_Terpene_2209to2408_LODrev.Rdata"))
+```
+
+##transform the emission data
+
+```{r}
+#round to 3 decimal places
+exp_total_rd <- exp_total
+assay(exp_total_rd) <- apply(assay(exp_total_rd), 2, sapply, round_preserve_lod, digits = 3)
+
+exp_Ohta_rd <- exp_Ohta
+assay(exp_Ohta_rd) <- apply(assay(exp_Ohta_rd), 2, sapply, round_preserve_lod, digits = 3)
+```
+
+```{r}
+#substitute "<LOD" with 0
+exp_total_nolod <- exp_total_rd
+assay(exp_total_nolod)[assay(exp_total_nolod) == "<LOD"] <- 0
+assay(exp_total_nolod) <- as.data.frame(assay(exp_total_nolod)) %>%
+  mutate_at(1:ncol(exp_total_nolod), as.numeric) #convert to numeric
+
+exp_Ohta_nolod <- exp_Ohta_rd
+assay(exp_Ohta_nolod)[assay(exp_Ohta_nolod) == "<LOD"] <- 0
+assay(exp_Ohta_nolod) <- as.data.frame(assay(exp_Ohta_nolod)) %>%
+  mutate_at(1:ncol(exp_Ohta_nolod), as.numeric) #convert to numeric
+```
+
+```{r}
+#add 0.01 and log-transform the data
+exp_total_log <- exp_total_nolod
+assay(exp_total_log) <- log(assay(exp_total_log) + 0.01, base = 10)
+
+exp_Ohta_log <- exp_Ohta_nolod
+assay(exp_Ohta_log) <- log(assay(exp_Ohta_log) + 0.01, base = 10)
+```
+
+#save the transformed data
+
+```{r}
+save(exp_total_rd, 
+     file = paste0(path_out, "/data/Sugi/BVOC/exp_Terpene_2007to2408_LODrev_rd.Rdata"))
+save(exp_Ohta_rd, 
+     file = paste0(path_out, "/data/Sugi/BVOC/exp_Terpene_2209to2408_LODrev_rd.Rdata"))
+save(exp_total_nolod, 
+     file = paste0(path_out, "/data/Sugi/BVOC/exp_Terpene_2007to2408_LODrev_noLOD.Rdata"))
+save(exp_Ohta_nolod, 
+     file = paste0(path_out, "/data/Sugi/BVOC/exp_Terpene_2209to2408_LODrev_noLOD.Rdata"))
+save(exp_total_log, 
+     file = paste0(path_out, "/data/Sugi/BVOC/exp_Terpene_2007to2408_LODrev_log.Rdata"))
+save(exp_Ohta_log, 
+     file = paste0(path_out, "/data/Sugi/BVOC/exp_Terpene_2209to2408_LODrev_log.Rdata"))
 ```
 
