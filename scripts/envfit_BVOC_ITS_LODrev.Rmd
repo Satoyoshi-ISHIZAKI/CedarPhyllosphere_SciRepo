@@ -1,0 +1,236 @@
+---
+title: "envfit_BVOC_ITS"
+output: html_document
+date: "2024-10-10"
+---
+
+#load packages
+
+```{r}
+library(readxl)
+library(phyloseq)
+library(tidyverse)
+library(vegan)
+library(RColorBrewer)
+library(SummarizedExperiment)
+```
+
+#path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+#create "path" file, and define "path" as your raw-data directory(character vector) in the file
+#"path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+#source codes
+
+```{r}
+source("../R/bestNMDS.R")
+```
+
+#read processed data
+
+```{r import}
+#the microbiome outlier (AZ_040_1, based on bray) is excluded in advance
+#rarefied-ASV table
+df_rarefied <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/df_rarefied_ITS_BVOC.csv"), row.names = 1)
+rownames(df_rarefied) <- formatC(as.numeric(rownames(df_rarefied)), width = 4, flag = "0") 
+#add 0 to the head of rownames
+
+#tax_table
+tax_table <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/tax_table2_ITS.csv"), row.names = 1)
+tax_table <- as.matrix(tax_table)
+
+#phylogenetic tree
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/trees.Rdata"))
+
+#metadata
+metadata <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/metadata_ITS_BVOC.csv"), row.names = 1)
+rownames(metadata) <- formatC(as.numeric(rownames(metadata)), width = 4, flag = "0")
+
+metadata$cloneID <- as.factor(metadata$cloneID)
+metadata$population <- as.factor(metadata$population)
+metadata$site <- as.factor(metadata$site)
+metadata$date <- as.factor(metadata$date)
+```
+
+##revised BVOC data
+
+```{r import}
+#read VOC data
+load(file = paste0(path_out, "/data/Sugi/BVOC/exp_Terpene_2209to2408_LODrev_nolod.Rdata"))
+load(file = paste0(path_out, "/data/Sugi/BVOC/exp_Terpene_2209to2408_LODrev_log.Rdata"))
+
+#extract the data for June 2023
+BVOC_2306 <- exp_Ohta_nolod %>% subset(Month == "2306")
+BVOC_2306_log <- exp_Ohta_log %>% subset(Month == "2306")
+#microbial samples for AJ_002_1 and AZ_004_1 were not collected, so remove them
+#fungal sample for AZ_040_1 was excluded in advance, so remove it
+BVOC_2306 <- BVOC_2306 %>% subset(!(treeID %in% c("AJ_002_01", "AZ_004_01", "AZ_040_01")))
+BVOC_2306_log <- BVOC_2306_log %>% subset(!(treeID %in% c("AJ_002_01", "AZ_004_01", "AZ_040_01")))
+
+#Longifolene is not detected in the June 2023 samples, so remove it
+BVOC_2306 <- BVOC_2306[, -which(colnames(BVOC_2306) == "Longifolene")]
+BVOC_2306_log <- BVOC_2306_log[, -which(colnames(BVOC_2306_log) == "Longifolene")]
+
+#remove beta-Caryophyllene from the dataframe
+bCary <- which("beta-Caryophyllene" == colnames(BVOC_2306_log)) #the column number of beta-Caryophyllene
+BVOC_2306_log_rm <- assay(BVOC_2306_log)[, -bCary] #remove beta-Caryophyllene
+```
+
+```{r}
+#calculate log-transformed total BVOC- and MTs emission
+BVOC_2306_total_log <- data.frame(total = log(rowSums(assay(BVOC_2306)), base = 10)) %>%
+  rownames_to_column(var = "sampleID")
+MT_2306_log <- data.frame(MTs = log(rowSums(assay(BVOC_2306[, BVOC_2306$mol_weight == "Mono"])) + 1, base = 10)) %>%
+  rownames_to_column(var = "sampleID")
+SQT_2306_log <- data.frame(SQT = log(rowSums(assay(BVOC_2306[, BVOC_2306$mol_weight == "Sesqui"])) + 1, base = 10)) %>%
+  rownames_to_column(var = "sampleID")
+DT_2306_log <- data.frame(DT = log(rowSums(assay(BVOC_2306[, BVOC_2306$mol_weight == "Di"])) + 1, base = 10)) %>%
+  rownames_to_column(var = "sampleID")
+
+#merge BVOC data
+all_2306_log <- BVOC_2306_log_rm %>%
+  rownames_to_column(var = "sampleID") %>%
+  full_join(BVOC_2306_total_log, by = "sampleID") %>%
+  full_join(MT_2306_log, by = "sampleID") %>%
+  full_join(SQT_2306_log, by = "sampleID") %>%
+  full_join(DT_2306_log, by = "sampleID")
+```
+
+#NMDS_bray
+
+##envfit
+
+```{r envfit}
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/NMDS_bray_ITS_BVOC2306.Rdata"))
+
+#check if the sampleID in the bacterial metadata and the nmds results match
+all(rownames(metadata) == rownames(nmds_bray$nmds$points))
+#check if the sampleID in the BVOC metadata and the BVOC data match
+all(rownames(BVOC_2306) == all_2306_log$sampleID)
+#check if the samplename in the bacterial metadata and the BVOC metadata match
+all(metadata$samplename == (mutate(data.frame(rowData(BVOC_2306)), 
+                                   samplename = paste(subpop, IDmid, str_sub(cloneID, 2), sep = "_"))$samplename))
+```
+
+```{r envfit}
+set.seed(45)
+fit_bray <- envfit(nmds_bray$nmds, 
+                   all_2306_log %>% column_to_rownames(var = "sampleID"),
+                   )
+
+show(fit_bray)
+
+df_fit_bray <-data.frame(fit_bray$vectors$arrows, 
+                         r = fit_bray$vectors$r, 
+                         p = fit_bray$vectors$pvals)
+
+bray_score <- scores(fit_bray, display = "vectors")
+bray_score <- rownames_to_column(data.frame(bray_score))
+bray_score <- data.frame(bray_score, 
+                        p = fit_bray$vectors$pvals, 
+                        arr_col = rep("grey", nrow(bray_score)))
+bray_score$arr_col[bray_score$p < 0.05] <- "black"
+
+bray_signif <- bray_score[bray_score$p < 0.1, ]
+
+save(fit_bray, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/envfit_bray_BVOC_LODrev.Rdata"))
+write.csv(df_fit_bray, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/envfit_bray_BVOC_LODrev.csv"))
+```
+
+```{r}
+#exclude the samples with <LOD values
+#extract the NMDS coordinates
+mat_ITS <- nmds_bray$nmds$points
+rownames(mat_ITS) <- all_2306_log$sampleID
+
+#exclude the terpenes with less than 10 of the samples having <LOD values
+ter_major <- which(apply(all_2306_log > 0, 2, sum) > 10)
+
+#data.frame for the results
+df_fit <- data.frame(terpene = colnames(all_2306_log), 
+                     MDS1 = NA, 
+                     MDS2 = NA, 
+                     r = NA, 
+                     p = NA)
+```
+
+```{r}
+set.seed(45)
+envfit(mat_ITS[which(all_2306_log[, ter_major[8]] > 0), ], 
+       all_2306_log[which(all_2306_log[, ter_major[8]] > 0), ter_major[8]], 
+       na.rm = TRUE)
+```
+
+```{r}
+for (i in ter_major[-1]) {
+  set.seed(45)
+  #sampleID of the samples with >LOD values
+  id <- which(all_2306_log[, i] > 0)
+  #perform envfit with the samples with >LOD values
+  fit <- envfit(mat_ITS[id, ], 
+                all_2306_log[id, i], 
+                na.rm = TRUE)
+  
+  #extract the NMDS coordinates
+  df_fit[i, "MDS1"] <- fit$vectors$arrows[1, 1]
+  df_fit[i, "MDS2"] <- fit$vectors$arrows[1, 2]
+  df_fit[i, "r"] <- fit$vectors$r[1]
+  df_fit[i, "p"] <- fit$vectors$pvals[1]
+}
+```
+
+```{r}
+df_nmds <- data.frame(metadata, nmds_bray$nmds$points)
+col_pop <- colorRampPalette(c("blue3", "orange2"))(3)
+
+p_bray <- ggplot(df_nmds, mapping = aes(x = MDS1, y = MDS2)) +
+  theme_classic() + 
+  geom_point(data = df_nmds, mapping = aes(colour = population), size = 1) +
+  coord_fixed(ratio = 1) + ## need aspect ratio of 1!
+  scale_color_manual(values = col_pop, labels = c("Ajigazawa", "Azouji", "Yakushima")) +
+  labs(color = "Population") +
+  xlim(c(-1.2, 1.3)) + ylim(c(-1.2, 1.3)) +
+  
+  #arrows to show the direction of BVOC emission vectors
+  geom_segment(data = bray_signif,
+               aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
+               arrow = arrow(length = unit(1, "mm")), 
+               color = bray_signif$arr_col) +
+  geom_text(data = bray_signif,  
+            aes(x = NMDS1, y = NMDS2 - 0.05, label = rowname), 
+            size = 2) +
+  
+  #annotation to show the significance of BVOC emission vectors
+  geom_segment(data = data.frame(x = 0.25, y = -1),
+               aes(x = x, xend = (x + 0.2), y = y, yend = y),
+               arrow = arrow(length = unit(1, "mm")), 
+               color = "grey") +
+  annotate("text", 
+           x = 0.75, y = -1, size = 2, 
+           label = "P < 0.1") +
+  
+  #annotation to show the stress value
+  annotate("text", 
+           x = 0.5, y = -1.15, size = 2, 
+           label = paste0("stress = ", 
+                          round(nmds_bray$nmds$stress, digits = 4))) +
+  
+  theme(axis.title.x = element_text(size = 7), 
+        axis.text.x = element_text(size = 5), 
+        
+        axis.title.y = element_text(size = 7), 
+        axis.text.y = element_text(size = 5), 
+        
+        axis.line = element_line(linewidth = 0.4), 
+        legend.title = element_text(size = 8), 
+        legend.text = element_text(size = 7), 
+        legend.key.size = unit(2, "mm"))
+show(p_bray)
+ggsave(plot = p_bray, 
+       filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/envfit_BVOC_log_LODrev.png"), 
+       dpi = 400, width = 75, height = 75, units = "mm")
+```

@@ -1,5 +1,5 @@
 ---
-title: "BVOC_zComp"
+title: "BVOC_preprocessing"
 output: html_document
 date: "2025-02-24"
 ---
@@ -286,10 +286,10 @@ assay(exp_Ohta_nolod) <- as.data.frame(assay(exp_Ohta_nolod)) %>%
 ```{r}
 #add 0.01 and log-transform the data
 exp_total_log <- exp_total_nolod
-assay(exp_total_log) <- log(assay(exp_total_log) + 0.01, base = 10)
+assay(exp_total_log) <- log(assay(exp_total_log) + 1, base = 10)
 
 exp_Ohta_log <- exp_Ohta_nolod
-assay(exp_Ohta_log) <- log(assay(exp_Ohta_log) + 0.01, base = 10)
+assay(exp_Ohta_log) <- log(assay(exp_Ohta_log) + 1, base = 10)
 ```
 
 #save the transformed data
