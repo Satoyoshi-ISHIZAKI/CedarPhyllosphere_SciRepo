@@ -53,3 +53,14 @@ if (!require("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
 
 BiocManager::install("SummarizedExperiment")
+
+#ANCOMBC
+if (!requireNamespace("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+BiocManager::install("ANCOMBC")
+
+#microbiome
+##needed for ANCOM-BC
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+BiocManager::install("microbiome")

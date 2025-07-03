@@ -1,0 +1,302 @@
+---
+title: "ANCOM-BC_16S_VOCPCA"
+output: html_document
+date: "2025-03-04"
+---
+
+#load
+
+```{r}
+library(readxl)
+library(phyloseq)
+library(SummarizedExperiment)
+library(microbiome)
+library(ANCOMBC)
+library(tidyverse)
+```
+
+#path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+#create "path" file, and define "path" as your raw-data directory(character vector) in the file
+#"path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+source("../R/plot_top_taxa.R")
+```
+
+#theme
+
+```{r}
+#theme settings
+mytheme <-theme(text = element_text(color = "black"), 
+                axis.text = element_text(color = "black"), 
+                legend.key.size = unit(8, "pt"), 
+                legend.spacing.x = unit(0, "mm"))
+```
+
+#read data
+
+```{r}
+#change "16S" to "ITS" to rarefy ITS data
+#rarefied-ASV table
+df_rarefied <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/df_rarefied_16S_BVOC.csv"), row.names = 1)
+rownames(df_rarefied) <- formatC(as.numeric(rownames(df_rarefied)), width = 4, flag = "0") 
+#add 0 to the head of rownames
+
+#tax_table
+tax_table <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/tax_table2_16S.csv"), row.names = 1)
+tax_table <- as.matrix(tax_table)
+
+#phylogenetic tree
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/trees.Rdata"))
+
+#metadata
+metadata <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/metadata_16S_BVOC.csv"), row.names = 1)
+rownames(metadata) <- formatC(as.numeric(rownames(metadata)), width = 4, flag = "0")
+
+metadata$cloneID <- as.factor(metadata$cloneID)
+metadata$population <- as.factor(metadata$population)
+metadata$site <- as.factor(metadata$site)
+metadata$date <- as.factor(metadata$date)
+```
+
+```{r}
+#read VOC data
+load(file = paste0(path_out, "/data/Sugi/BVOC/exp_Terpene_2209to2408_LODrev_nolod.Rdata"))
+load(file = paste0(path_out, "/data/Sugi/BVOC/exp_Terpene_2209to2408_LODrev_log.Rdata"))
+#exp_Ohta_nolod is the data in which LOD substituted with 0
+#exp_Ohta_log is the log-transformed data
+
+#extract the data for June 2023
+BVOC_2306 <- exp_Ohta_nolod %>% subset(Month == "2306")
+BVOC_2306_log <- exp_Ohta_log %>% subset(Month == "2306")
+#microbial samples for AJ_002_1 and AZ_004_1 were not collected, so remove them
+BVOC_2306 <- BVOC_2306 %>% subset(!(treeID %in% c("AJ_002_01", "AZ_004_01")))
+BVOC_2306_log <- BVOC_2306_log %>% subset(!(treeID %in% c("AJ_002_01", "AZ_004_01")))
+
+#match the rownames with those of the microbial data
+#feature to match the rownames
+rowData(BVOC_2306) <- data.frame(rowData(BVOC_2306)) %>%
+  mutate(samplename = paste(subpop, IDmid, str_sub(cloneID, 2), sep = "_"))
+rowData(BVOC_2306_log) <- data.frame(rowData(BVOC_2306_log)) %>%
+  mutate(samplename = paste(subpop, IDmid, str_sub(cloneID, 2), sep = "_"))
+
+rownames(BVOC_2306) <- rownames(metadata[match(rowData(BVOC_2306)$samplename, 
+                                               metadata$samplename), 
+                                         ])
+rownames(BVOC_2306_log) <- rownames(metadata[match(rowData(BVOC_2306_log)$samplename,
+                                                   metadata$samplename),
+                                             ])
+
+#Longifolene is not detected in the June 2023 samples, so remove it
+BVOC_2306 <- BVOC_2306[, -which(colnames(BVOC_2306) == "Longifolene")]
+BVOC_2306_log <- BVOC_2306_log[, -which(colnames(BVOC_2306_log) == "Longifolene")]
+
+#remove beta-Caryophyllene from the dataframe
+bCary <- which("beta-Caryophyllene" == colnames(BVOC_2306_log)) #the column number of beta-Caryophyllene
+BVOC_2306_log_rm <- assay(BVOC_2306_log)[, -bCary] #remove beta-Caryophyllene
+```
+
+```{r}
+#calculate log-transformed total BVOC- and MTs emission
+BVOC_2306_total_log <- data.frame(total = log(rowSums(assay(BVOC_2306)), base = 10)) %>%
+  rownames_to_column(var = "sampleID")
+MT_2306_log <- data.frame(MTs = log(rowSums(assay(BVOC_2306[, BVOC_2306$mol_weight == "Mono"])) + 1, base = 10)) %>%
+  rownames_to_column(var = "sampleID")
+SQT_2306_log <- data.frame(SQT = log(rowSums(assay(BVOC_2306[, BVOC_2306$mol_weight == "Sesqui"])) + 1, base = 10)) %>%
+  rownames_to_column(var = "sampleID")
+DT_2306_log <- data.frame(DT = log(rowSums(assay(BVOC_2306[, BVOC_2306$mol_weight == "Di"])) + 1, base = 10)) %>%
+  rownames_to_column(var = "sampleID")
+
+#merge BVOC data
+all_2306_log <- BVOC_2306_log_rm %>%
+  rownames_to_column(var = "sampleID") %>%
+  full_join(BVOC_2306_total_log, by = "sampleID") %>%
+  full_join(MT_2306_log, by = "sampleID") %>%
+  full_join(SQT_2306_log, by = "sampleID") %>%
+  full_join(DT_2306_log, by = "sampleID")
+```
+
+#phyloseq object
+
+```{r}
+ps_16S_BVOC <- phyloseq(otu_table(t(df_rarefied), taxa_are_rows = TRUE),
+                            tax_table(tax_table),
+                            sample_data(metadata),
+                            phyloseq::phy_tree(tree_rarefied2$data))
+```
+
+#edit sample_data
+
+```{r}
+#add VOC emission profile to 16S sample_data
+samdata_16S <- data.frame(sample_data(ps_16S_BVOC)) %>%
+  rownames_to_column(var = "sampleID")
+
+samdata_new <- left_join(samdata_16S, 
+                         all_2306_log,
+                         by = "sampleID") %>%
+  column_to_rownames(var = "sampleID")
+
+sample_data(ps_16S_BVOC) <- sample_data(samdata_new)
+```
+
+#plot bar
+
+```{r}
+MT_asc <- rownames(data.frame(sample_data(ps_16S_BVOC)) %>% arrange(total))
+bar_16S <- plot_top_taxa(ps_16S_BVOC,
+                         n_taxa = 20,
+                         taxonomic_level = "Phylum", 
+                         transform = "relative", 
+                         show_unknown = FALSE, 
+                         sample_order = MT_asc)
+
+bar_16S$plot <- bar_16S$plot +
+  theme_classic(base_size = 12) + mytheme +
+  xlab("Low - Terpenes - High")
+  #facet_wrap(~population, 
+  #           scale = "free_x")
+show(bar_16S$plot)
+```
+
+#ANCOM-BC
+
+```{r}
+ancombc_16S_total <- ancombc2(data = ps_16S_BVOC,
+                              tax_level = "Phylum",
+                              fix_formula = "total",
+                              p_adj_method = "BH",
+                              prv_cut = 0.1, #taxa with less than 10% occurrence are cutted
+                              lib_cut = 0, #library size thresholds
+                              s0_perc = 0.05, #small count to add as pseudo count. % of 
+                              #group = "population", #group to detect structural zeros
+                              struc_zero = FALSE,
+                              neg_lb = TRUE,
+                              alpha = 0.05, #significance
+                              global = FALSE, #global test
+                              verbose = TRUE)
+```
+
+#results
+
+```{r}
+View(ancombc_16S_total$res)
+```
+
+```{r}
+ancombc_16S_MTs <- ancombc2(data = ps_16S_BVOC,
+                            tax_level = "Phylum",
+                            fix_formula = "MTs",
+                            p_adj_method = "BH",
+                            prv_cut = 0.1, #taxa with less than 10% occurrence are cutted
+                            lib_cut = 0, #library size thresholds
+                            s0_perc = 0.05, #small count to add as pseudo count. % of
+                            #group = "population", #group to detect structural zeros
+                            struc_zero = FALSE,
+                            neg_lb = TRUE,
+                            alpha = 0.05, #significance
+                            global = FALSE, #global test
+                            verbose = TRUE)
+```
+
+```{r}
+View(ancombc_16S_MTs$res)
+```
+
+```{r}
+#subset samples with beta-Farnesene > 0
+ps_16S_bF <- subset_samples(ps_16S_BVOC, 
+                            `beta.Farnesene` > 0)
+
+ancombc_16S_bF <- ancombc2(data = ps_16S_bF,
+                           tax_level = "Phylum",
+                           fix_formula = "beta.Farnesene",
+                           p_adj_method = "BH",
+                           prv_cut = 0.1, #taxa with less than 10% occurrence are cutted
+                           lib_cut = 0, #library size thresholds
+                           s0_perc = 0.05, #small count to add as pseudo count. % of
+                           #group = "population", #group to detect structural zeros
+                           struc_zero = FALSE,
+                           neg_lb = TRUE,
+                           alpha = 0.05, #significance
+                           global = FALSE, #global test
+                           verbose = TRUE)
+```
+
+```{r}
+View(ancombc_16S_bF$res)
+```
+
+```{r}
+#subset samples with beta-Farnesene > 0
+ps_16S_entK <- subset_samples(ps_16S_BVOC, 
+                            `ent.Kaurene` > 0)
+
+ancombc_16S_entK <- ancombc2(data = ps_16S_entK,
+                           tax_level = "Phylum",
+                           fix_formula = "ent.Kaurene",
+                           p_adj_method = "BH",
+                           prv_cut = 0.1, #taxa with less than 10% occurrence are cutted
+                           lib_cut = 0, #library size thresholds
+                           s0_perc = 0.05, #small count to add as pseudo count. % of
+                           #group = "population", #group to detect structural zeros
+                           struc_zero = FALSE,
+                           neg_lb = TRUE,
+                           alpha = 0.05, #significance
+                           global = FALSE, #global test
+                           verbose = TRUE)
+```
+
+<tr>**Direct differential-abundance test doesn't detect any DA taxon.**
+<tr>**Try to detect DA-taxa between those sample sets with differential BVOC emissions.**
+
+#lfc plot
+##230824
+
+```{r}
+#AZ to AJ
+df_230824 <- ancombc_16Sfilt$res %>%
+    dplyr::select(taxon, ends_with("date230824")) #select stats related with date230824
+df_fig_230824 <- df_230824 %>%
+    dplyr::filter(diff_date230824 == 1) %>% #differentially abundant in 230824 compared to AJ
+    dplyr::arrange(desc(lfc_date230824)) %>% #log fold changes in date230824 to AJ
+    dplyr::mutate(direct = ifelse(lfc_date230824 > 0, "Positive LFC", "Negative LFC"),
+                  color = ifelse(passed_ss_date230824 == 1, "aquamarine3", "black"))
+#shorten the taxon names for uncultured taxa
+df_fig_230824$taxon <- sapply(lapply(str_split(df_fig_230824$taxon, "_"),
+                                     tail, 2),
+                              paste0, collapse = "_")
+df_fig_230824$taxon = factor(df_fig_230824$taxon, levels = df_fig_230824$taxon)
+df_fig_230824$direct = factor(df_fig_230824$direct, 
+                           levels = c("Positive LFC", "Negative LFC"))
+
+fig_230824 = df_fig_230824 %>%
+    ggplot(aes(x = taxon, y = lfc_date230824, fill = direct)) + 
+    geom_bar(stat = "identity", width = 0.7, color = "black", 
+             position = position_dodge(width = 0.4)) +
+    geom_errorbar(aes(ymin = lfc_date230824 - se_date230824, ymax = lfc_date230824 + se_date230824), 
+                  width = 0.2, position = position_dodge(0.05), color = "black") + 
+    labs(x = NULL, y = "Log fold change", 
+         title = "Log fold changes in 230824 compared to 230602") + 
+    scale_fill_discrete(name = NULL) +
+    scale_color_discrete(name = NULL) +
+    theme_classic(base_size = 12) + mytheme +
+    theme(plot.title = element_text(hjust = 0.5),
+          panel.grid.minor.y = element_blank(),
+          axis.text.x = element_text(angle = 60, hjust = 1,
+                                     color = df_fig_230824$color))
+fig_230824
+
+ggsave(fig_230824, 
+       file = paste0(path_out, "/figures/16S/ANCOM-BC_LFC_16Sfilt_inVOC_230824_Genus.pdf"), 
+       width = 160, height = 120, units = "mm", dpi = 300)
+```
+
+
+
+```{r}
+
+```
+
