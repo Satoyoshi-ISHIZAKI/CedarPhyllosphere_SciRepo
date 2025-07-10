@@ -64,3 +64,7 @@ BiocManager::install("ANCOMBC")
 if (!require("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
 BiocManager::install("microbiome")
+
+#FungalTraits
+devtools::install_github("ropenscilabs/datastorr")
+devtools::install_github("traitecoevo/fungaltraits")

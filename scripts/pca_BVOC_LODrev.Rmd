@@ -173,6 +173,7 @@ p_pca <- autoplot(pca_BVOC_log_rm_LODrev,
                   color = "Population", 
                   scale = 1,
                   loadings = TRUE,
+                  loadings.size = 5.5,
                   loadings.colour = col_BVOC,
                   loadings.label = TRUE,
                   loadings.label.size = 5.5 * .352777778,
@@ -222,13 +223,14 @@ p_pca23 <- autoplot(pca_BVOC_log_rm_LODrev,
                     color = "Population",
                     scale = 1,
                     loadings = TRUE,
-                    loadings.colou = col_BVOC,
+                    loadings.colour = col_BVOC,
+                    loadings.size = 5.5,
                     loadings.label = TRUE,
-                    loadings.label.size = 5.5 * .352777778,
+                    loadings.label.size = 10 * .352777778,
                     loadings.label.colour = "black"
                     ) +
   coord_fixed(ratio = 1) +
-  theme_classic(base_size = 11) +
+  theme_classic(base_size = 12) +
   labs(color = "Population") +
   scale_color_manual(values = col_pop, labels = c("Ajigazawa", "Azouji", "Yakushima")) +
   mytheme + theme(legend.position = "none")
@@ -238,6 +240,11 @@ show(p_pca23)
 ggsave(plot = p_pca23,
        filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/pca_BVOC_log_LODrev23.png"), 
        dpi = 300, width = 160, height = 160, units = "mm")
+
+#Don't do the command below after editing with Inkscape
+ggsave(plot = p_pca23,
+       filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/pca_BVOC_log_LODrev23.pdf"), 
+       dpi = 300, width = 160, height = 160, units = "mm", scale = 1, family = "Helvetica")
 ```
 
 #merge plot
@@ -265,9 +272,9 @@ ggsave(plot = p_merge,
        dpi = 300, width = 160, height = 80, units = "mm", scale = 1)
 
 #Don't do below command after editing with Inkscape
-#ggsave(plot = p_merge,
-#       filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_BVOC_pca1_LODrev.pdf"), 
-#       dpi = 300, width = 160, height = 80, units = "mm", scale = 1, family = "Helvetica")
+ggsave(plot = p_merge,
+       filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/barplot_BVOC_pca1_LODrev.pdf"), 
+       dpi = 300, width = 160, height = 80, units = "mm", scale = 1, family = "Helvetica")
 ```
 
 #LM (to test the correlations between latitude and BVOCs emission rates)

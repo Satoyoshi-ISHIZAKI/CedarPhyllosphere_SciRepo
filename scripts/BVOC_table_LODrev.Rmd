@@ -62,16 +62,30 @@ ter_2306 <- ter_2306 %>%
 #round to 3 decimal places
 # Apply the function "round_preserve_lod" to all columns
 ter_2306[, -1] <- apply(ter_2306[, -1], 2, sapply, round_preserve_lod, digits = 3)
+
+LOD <- ter_molwei %>%
+  dplyr::select(`LOD (ng)` = LOD_ng) %>%
+  mutate(`LOD (ng)` = as.character(`LOD (ng)`)) %>%
+  drop_na() %>%
+  dplyr::filter(rownames(.) != "beta-Ocimene")
+  
+LOD <- as.data.frame(t(LOD))
+LOD <- rownames_to_column(LOD, var = "Samplename")
+
+ter_2306_LOD <- dplyr::bind_rows(LOD, ter_2306)
 ```
 
 #output basal emission table
 
 ```{r}
-BVOC_tbl <- ter_2306
+BVOC_tbl <- ter_2306_LOD
 
 BVOC_tbl <- BVOC_tbl %>% 
-  gt::gt() %>%
+  gt::gt(rowname_col = "Samplename") %>%
   gt::tab_style(cell_text(weight = "bold"), locations = cells_column_labels(columns = everything())) %>%
+  gt::tab_row_group(group = "Samplename", 
+                    rows = 2:nrow(BVOC_tbl)) %>%
+  gt::row_group_order(groups = c(NA, "Samplename"))%>%
   gt::cols_label(`alpha-Pinene` = md("*α*-Pinene"), 
                  `beta-Pinene` = md("*β*-Pinene"), 
                  `alpha-Terpinene` = md("*α*-Terpinene"), 
@@ -83,13 +97,13 @@ BVOC_tbl <- BVOC_tbl %>%
                  `ent-Kaurene` = md("*ent*-Kaurene")) %>%
   cols_width(everything() ~ px(1800 / (ncol(ter_2306)+1))) %>%
   tab_options(table.font.names = "Times New Roman", 
-              table.font.size = 10.5)
+              table.font.size = 9.5)
 
 show(BVOC_tbl)
 
 gtsave(BVOC_tbl, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/export/BVOC_BE_LODrev.png"), 
-       vwidth = 1890, vheight = 1417)
+       vwidth = 2362, vheight = 1323)
 gtsave(BVOC_tbl, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/export/BVOC_BE_LODrev.pdf"), 
-       vwidth = 1890, vheight = 1417)
+       vwidth = 2362, vheight = 1323)
 ```
 

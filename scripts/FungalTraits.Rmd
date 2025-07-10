@@ -1,0 +1,110 @@
+---
+title: "FungalTraits"
+output: html_document
+date: "2025-07-07"
+---
+#load packages
+
+```{r}
+#test commit
+library(readxl)
+library(phyloseq)
+library(tidyverse)
+library(vegan)
+library(glm2)
+library(MASS)
+library(lmtest)
+library(ggfortify)
+library(ggeffects)
+library(RColorBrewer)
+library(gridExtra)
+library(grid)
+library(gtable)
+library(gt)
+
+library(fungaltraits)
+```
+
+#path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+#create "path" file, and define "path" as your raw-data directory(character vector) in the file
+#"path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+#source codes
+
+```{r}
+source("../R/occurrence.R")
+source("../R/label.R")
+source("../R/Greek.R")
+source("../R/html_italic.R")
+```
+
+#read processed data
+#ITS
+
+```{r import}
+#rarefied_ASV_table
+df_ITS <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/df_rarefied_ITS.csv"), row.names = 1)
+rownames(df_ITS) <- formatC(as.numeric(rownames(df_ITS)), width = 4, flag = "0") #add 0 to rownames
+
+#tax_table
+tax_ITS <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/tax_table2_ITS.csv"), row.names = 1)
+tax_ITS <- as.matrix(tax_ITS)
+
+#phylogenetic tree
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/trees.Rdata"))
+treeITS <- tree2
+treeITS_rarefied <- tree_rarefied2
+rm(list = c("tree2", "tree_rarefied2"))
+
+#metadata
+metadata <- read_excel(paste0(path_out, "/data/Sugi/metadata_2306.xlsx"), sheet = "Sheet1")
+metadata <- column_to_rownames(metadata, var = "Sample_Name")
+metadata$cloneID <- as.factor(metadata$cloneID)
+metadata$population <- as.factor(metadata$population)
+metadata$site <- as.factor(metadata$site)
+metadata$date <- as.factor(metadata$date)
+
+#read climate data
+meta_pop <- read.csv(paste0(path_out, "/data/Sugi/pop_climate_pca.csv"))
+meta_pop <- column_to_rownames(meta_pop, var = "X")
+
+#add climatic data
+metadata <- metadata %>%
+  dplyr::select(-c(fullname, latitude, longitude, altitude)) %>%
+  left_join(meta_pop, by = "population")
+rownames(metadata) <- formatC(as.numeric(rownames(metadata)), width = 4, flag = "0")
+```
+
+#phyloseq
+
+```{r}
+ps_ITS <- phyloseq(otu_table(t(df_ITS), taxa_are_rows = TRUE),
+                 tax_table(tax_ITS),
+                 sample_data(metadata),
+                 phy_tree(treeITS_rarefied$data))
+```
+
+#Guild based on the Kobayashi data
+
+```{r}
+#load guild data
+path_gs <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/pathogen_Gs.csv"))
+path_gs <- column_to_rownames(path_gs, var = "X")
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/phyloseq_pathogen.Rdata"))
+
+#extract ASVs whose genus is in the Kobayashi data
+ps_Kobayashi <- subset_taxa(ps_ITS, Genus %in% path_gs$Genus)
+```
+
+#YET TO BE DONE
+
+```{r}
+#FungalTraits assumes the ITS sequencing data with species-level taxonomic information for guild assignment, but the targeted ASVs are assigned to the genus level taxonomies only.
+#Try using FunGuild
+```
+

@@ -146,17 +146,22 @@ sample_data(ps_ITS_BVOC) <- sample_data(samdata_new)
 #plot bar
 
 ```{r}
-MT_asc <- rownames(data.frame(sample_data(ps_ITS_BVOC)) %>% arrange(total))
-bar_ITS <- plot_top_taxa(ps_ITS_BVOC,
+ps_ITS_bF <- subset_samples(ps_ITS_BVOC, 
+                           `beta.Farnesene` > 0) #ps without the samples which emitted no detectable beta-Farnesene
+ps_ITS_entK <- subset_samples(ps_ITS_BVOC, 
+                            `ent.Kaurene` > 0) #ps without the samples which emitted no detectable ent-Kaurene
+
+T_asc <- rownames(data.frame(sample_data(ps_ITS_entK)) %>% arrange(ent.Kaurene))
+bar_ITS <- plot_top_taxa(ps_ITS_entK,
                          n_taxa = 20,
                          taxonomic_level = "Class", 
                          transform = "relative", 
                          show_unknown = FALSE, 
-                         sample_order = MT_asc)
+                         sample_order = T_asc)
 
-bar_16S$plot <- bar_ITS$plot +
+bar_ITS$plot <- bar_ITS$plot +
   theme_classic(base_size = 12) + mytheme +
-  xlab("Low - Terpenes - High")
+  xlab("Low - ent-Kaurene - High")
   #facet_wrap(~population, 
   #           scale = "free_x")
 show(bar_ITS$plot)
@@ -165,6 +170,10 @@ show(bar_ITS$plot)
 #ANCOM-BC
 
 ```{r}
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/ancombc_ITS_BVOC2306.Rdata"))
+```
+
+```{r,eval=FALSE}
 ancombc_ITS_total <- ancombc2(data = ps_ITS_BVOC,
                               tax_level = "Class",
                               fix_formula = "total",
@@ -174,7 +183,7 @@ ancombc_ITS_total <- ancombc2(data = ps_ITS_BVOC,
                               s0_perc = 0.05, #small count to add as pseudo count. % of 
                               #group = "population", #group to detect structural zeros
                               struc_zero = FALSE,
-                              neg_lb = TRUE,
+                              neg_lb = FALSE,
                               alpha = 0.05, #significance
                               global = FALSE, #global test
                               verbose = TRUE)
@@ -183,12 +192,12 @@ ancombc_ITS_total <- ancombc2(data = ps_ITS_BVOC,
 #results
 
 ```{r}
-View(ancombc_16S_total$res)
+show(ancombc_ITS_total$res)
 ```
 
-```{r}
-ancombc_16S_MTs <- ancombc2(data = ps_16S_BVOC,
-                            tax_level = "Phylum",
+```{r,eval=FALSE}
+ancombc_ITS_MTs <- ancombc2(data = ps_ITS_BVOC,
+                            tax_level = "Class",
                             fix_formula = "MTs",
                             p_adj_method = "BH",
                             prv_cut = 0.1, #taxa with less than 10% occurrence are cutted
@@ -196,20 +205,21 @@ ancombc_16S_MTs <- ancombc2(data = ps_16S_BVOC,
                             s0_perc = 0.05, #small count to add as pseudo count. % of
                             #group = "population", #group to detect structural zeros
                             struc_zero = FALSE,
-                            neg_lb = TRUE,
+                            neg_lb = FALSE,
                             alpha = 0.05, #significance
                             global = FALSE, #global test
                             verbose = TRUE)
 ```
 
 ```{r}
-View(ancombc_16S_MTs$res)
+show(ancombc_ITS_MTs$res)
 ```
 
-```{r}
+```{r,eval=FALSE}
 #subset samples with beta-Farnesene > 0
-#ps_ITS_bF <- subset_samples(ps_ITS_BVOC, 
-#                           `beta.Farnesene` > 0)
+ps_ITS_bF <- subset_samples(ps_ITS_BVOC, 
+                           `beta.Farnesene` > 0)
+#when LOD values are not removed, no taxa are detected as DA
 
 ancombc_ITS_bF <- ancombc2(data = ps_ITS_BVOC,
                            tax_level = "Class",
@@ -220,23 +230,24 @@ ancombc_ITS_bF <- ancombc2(data = ps_ITS_BVOC,
                            s0_perc = 0.05, #small count to add as pseudo count. % of
                            #group = "population", #group to detect structural zeros
                            struc_zero = FALSE,
-                           neg_lb = TRUE,
+                           neg_lb = FALSE,
                            alpha = 0.05, #significance
                            global = FALSE, #global test
                            verbose = TRUE)
 ```
 
 ```{r}
-View(ancombc_ITS_bF$res)
+show(ancombc_ITS_bF$res)
 ```
 
-```{r}
-#subset samples with beta-Farnesene > 0
-ps_16S_entK <- subset_samples(ps_16S_BVOC, 
+```{r,eval=FALSE}
+#subset samples with ent-Kaurene > 0
+ps_ITS_entK <- subset_samples(ps_ITS_BVOC, 
                             `ent.Kaurene` > 0)
+ps_ITS_entK <- prune_taxa(taxa_sums(otu_table(ps_ITS_entK) > 0), ps_ITS_entK) #remove the taxa with 0 sum
 
-ancombc_16S_entK <- ancombc2(data = ps_16S_entK,
-                           tax_level = "Phylum",
+ancombc_ITS_entK <- ancombc2(data = ps_ITS_entK,
+                           tax_level = "Class",
                            fix_formula = "ent.Kaurene",
                            p_adj_method = "BH",
                            prv_cut = 0.1, #taxa with less than 10% occurrence are cutted
@@ -244,19 +255,33 @@ ancombc_16S_entK <- ancombc2(data = ps_16S_entK,
                            s0_perc = 0.05, #small count to add as pseudo count. % of
                            #group = "population", #group to detect structural zeros
                            struc_zero = FALSE,
-                           neg_lb = TRUE,
+                           neg_lb = FALSE,
                            alpha = 0.05, #significance
                            global = FALSE, #global test
                            verbose = TRUE)
 ```
 
-<tr>**Direct differential-abundance test doesn't detect any DA taxon.**
-<tr>**Try to detect DA-taxa between those sample sets with differential BVOC emissions.**
+```{r}
+show(ancombc_ITS_entK$res)
+```
+
+<tr>**DAs were detected mostly for the rare taxa (with small relative abundances and occurrences)**
+<tr>**Eurotiomycetes was negatively correlated with the ent-Kaurene emission, although it didn't pass SA and p-adjustment.**
+
+##save the results
+
+```{r}
+save(ancombc_ITS_total, 
+     ancombc_ITS_MTs, 
+     ancombc_ITS_bF, 
+     ancombc_ITS_entK, 
+     file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/ancombc_ITS_BVOC2306.Rdata"))
+```
 
 #lfc plot
 ##230824
 
-```{r}
+```{r,eval=FALSE}
 #AZ to AJ
 df_230824 <- ancombc_16Sfilt$res %>%
     dplyr::select(taxon, ends_with("date230824")) #select stats related with date230824

@@ -1,0 +1,332 @@
+---
+title: "envfit_ASV_16S"
+output: html_document
+date: "2024-10-10"
+---
+
+#load packages
+
+```{r}
+library(readxl)
+library(phyloseq)
+library(SummarizedExperiment)
+library(tidyverse)
+library(vegan)
+library(RColorBrewer)
+library(ggrepel)
+library(gridExtra)
+library(gtable)
+library(grid)
+```
+
+#path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+#create "path" file, and define "path" as your raw-data directory(character vector) in the file
+#"path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+#source codes
+
+```{r}
+source("../R/occurrence.R")
+source("../R/label.R")
+source("../R/html_italic.R")
+source("../R/Greek.R")
+source("../R/gg_italic.R")
+```
+
+#read processed data
+##16S
+
+```{r import}
+#rarefied-ASV table
+df_16S <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/df_rarefied_16S_BVOC.csv"), row.names = 1)
+rownames(df_16S) <- formatC(as.numeric(rownames(df_16S)), width = 4, flag = "0") 
+#add 0 to the head of rownames
+
+#tax_table
+tax_16S <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/tax_table2_16S.csv"), row.names = 1)
+tax_16S <- as.matrix(tax_16S)
+
+#phylogenetic tree
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/trees.Rdata"))
+tree16S <- tree2
+tree16S_rarefied <- tree_rarefied2
+rm(list = c("tree2", "tree_rarefied2"))
+
+#metadata
+meta_16S <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/metadata_16S_BVOC.csv"), row.names = 1)
+rownames(meta_16S) <- formatC(as.numeric(rownames(meta_16S)), width = 4, flag = "0")
+
+meta_16S$cloneID <- as.factor(meta_16S$cloneID)
+meta_16S$population <- as.factor(meta_16S$population)
+meta_16S$site <- as.factor(meta_16S$site)
+meta_16S$date <- as.factor(meta_16S$date)
+
+#log-transformed BVOCs Emission
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/BVOC_2306_16S_log.Rdata"))
+BVOC_2306_log_full <- BVOC_2306_log
+BVOC_2306_total_log_full <- BVOC_2306_total_log
+rm(BVOC_2306_log)
+rm(BVOC_2306_total_log)
+colnames(BVOC_2306_log_full) <- greek(colnames(BVOC_2306_log_full))
+colnames(BVOC_2306_log_full) <- gg_italic(colnames(BVOC_2306_log_full), "-")
+
+#output of NMDS (based on bray-curtis dissimilarity)
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/BVOC/NMDS_bray_16S_BVOC2306.Rdata"))
+nmds_16S <- nmds_bray
+rm(nmds_bray)
+
+#output of vector-fitting (BVOC on NMDS based on bray)
+load(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/envfit_bray_BVOC_LODrev.Rdata"))
+fit_bray_16S <- fit_bray
+rm(fit_bray)
+
+#output Of vector-fitting (Phylum on NMDS)
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/envfit_bray_ASV_BVOC.Rdata"))
+fit_ASV_16S <- fit_ASV
+rm(fit_ASV)
+```
+
+##ITS
+
+```{r}
+#rarefied-ASV table
+df_ITS <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/df_rarefied_ITS_BVOC.csv"), row.names = 1)
+rownames(df_ITS) <- formatC(as.numeric(rownames(df_ITS)), width = 4, flag = "0") 
+#add 0 to the head of rownames
+
+#tax_table
+tax_ITS <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/tax_table2_ITS.csv"), row.names = 1)
+tax_ITS <- as.matrix(tax_ITS)
+
+#phylogenetic tree
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/trees.Rdata"))
+treeITS <- tree2
+treeITS_rarefied <- tree_rarefied2
+rm(list = c("tree2", "tree_rarefied2"))
+
+#metadata
+meta_ITS <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/metadata_ITS_BVOC.csv"), row.names = 1)
+rownames(meta_ITS) <- formatC(as.numeric(rownames(meta_ITS)), width = 4, flag = "0")
+
+meta_ITS$cloneID <- as.factor(meta_ITS$cloneID)
+meta_ITS$population <- as.factor(meta_ITS$population)
+meta_ITS$site <- as.factor(meta_ITS$site)
+meta_ITS$date <- as.factor(meta_ITS$date)
+
+#log-transformed BVOCs Emission
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/BVOC_2306_ITS_log.Rdata"))
+BVOC_2306_log_out <- BVOC_2306_log
+BVOC_2306_total_log_out <- BVOC_2306_total_log
+rm(BVOC_2306_log)
+rm(BVOC_2306_total_log)
+colnames(BVOC_2306_log_out) <- greek(colnames(BVOC_2306_log_out))
+colnames(BVOC_2306_log_out) <- gg_italic(colnames(BVOC_2306_log_out), sep = "-")
+
+#output of NMDS (based on bray-curtis dissimilarity)
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/BVOC/NMDS_bray_ITS_BVOC2306.Rdata"))
+nmds_ITS <- nmds_bray
+rm(nmds_bray)
+
+#output of vector-fitting (BVOC on NMDS based on bray)
+load(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/envfit_bray_BVOC_LODrev.Rdata"))
+fit_bray_ITS <- fit_bray
+rm(fit_bray)
+
+#output Of vector-fitting (Phylum on NMDS)
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/envfit_bray_ASV_BVOC.Rdata"))
+fit_ASV_ITS <- fit_ASV
+rm(fit_ASV)
+```
+
+#envfit_BVOC
+##16S
+
+```{r envfit}
+score_16S <- scores(fit_bray_16S, display = "vectors")
+score_16S <- rownames_to_column(data.frame(score_16S))
+score_16S <- data.frame(score_16S, 
+                        p = fit_bray_16S$vectors$pvals, 
+                        arr_col = rep("green4", nrow(score_16S)), 
+                        arr_lty = rep("dashed", nrow(score_16S)))
+score_16S$arr_col[score_16S$rowname == "total"] <- "black"
+score_16S$arr_lty[score_16S$p < 0.05] <- "solid"
+
+signif_16S <- score_16S[score_16S$p < 0.1, ]
+```
+
+##ITS
+
+```{r}
+score_ITS <- scores(fit_bray_ITS, display = "vectors")
+score_ITS <- rownames_to_column(data.frame(score_ITS))
+score_ITS <- data.frame(score_ITS, 
+                        p = fit_bray_ITS$vectors$pvals, 
+                        arr_col = rep("blue3", nrow(score_ITS)), 
+                        arr_lty = rep("dashed", nrow(score_ITS)))
+score_ITS$arr_col[score_ITS$p < 0.05] <- "blue3"
+score_ITS$arr_lty[score_ITS$p < 0.05] <- "solid"
+
+signif_ITS <- score_ITS[score_ITS$p < 0.1, ]
+rownames(signif_ITS) <- greek(rownames(signif_ITS))
+rownames(signif_ITS) <- gg_italic(rownames(signif_ITS), sep = "-")
+signif_ITS$rowname <- rownames(signif_ITS)
+```
+
+
+#fit_ASV
+##16S
+
+```{r}
+score_16S_ASV <- scores(fit_ASV_16S, display = "vectors")
+score_16S_ASV <- rownames_to_column(data.frame(score_16S_ASV))
+score_16S_ASV <- data.frame(score_16S_ASV, 
+                        class = fit_ASV_16S$tax_table[score_16S_ASV$rowname, "Phylum"], 
+                        p = fit_ASV_16S$vectors$pvals, 
+                        arr_col = rep("grey", nrow(score_16S_ASV)))
+
+signif_16S_ASV <- score_16S_ASV[score_16S_ASV$p < 0.05, ]
+```
+
+##ITS
+
+```{r}
+score_ITS_ASV <- scores(fit_ASV_ITS, display = "vectors")
+score_ITS_ASV <- rownames_to_column(data.frame(score_ITS_ASV))
+score_ITS_ASV <- data.frame(score_ITS_ASV, 
+                        class = fit_ASV_ITS$tax_table[score_ITS_ASV$rowname, "Class"], 
+                        p = fit_ASV_ITS$vectors$pvals, 
+                        arr_col = rep("grey", nrow(score_ITS_ASV)))
+
+signif_ITS_ASV <- score_ITS_ASV[score_ITS_ASV$p < 0.05, ]
+```
+
+#plot
+##theme settings
+
+```{r}
+#theme settings
+mytheme <-theme(text = element_text(color = "black"),
+                axis.text = element_text(color = "black"),
+                legend.key.size = unit(8, "pt"), 
+                legend.spacing.x = unit(0, "mm"))
+```
+
+##16S
+
+```{r}
+df_nmds_16S <- data.frame(meta_16S, nmds_16S$nmds$points)
+col_pop <- colorRampPalette(c("dodgerblue", "orangered"))(3)
+#adjust the position of the names of BVOCs
+
+p_16S <- ggplot(df_nmds_16S, mapping = aes(x = MDS1, y = MDS2)) +
+  theme_classic() + mytheme +
+  geom_point(data = df_nmds_16S, mapping = aes(colour = population)) +
+  coord_fixed(ratio = 1) + ## need aspect ratio of 1!
+  scale_color_manual(values = col_pop, labels = c("Ajigasawa", "Azouji", "Yakushima")) +
+  labs(color = "Population") +
+  xlim(c(-1.1, 2.1)) + ylim(c(-1.1, 2.1)) +
+  
+  #arrows to show the direction of ASV abundance vectors
+  geom_segment(data = signif_16S_ASV,
+               aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
+               arrow = arrow(length = unit(2, "mm")), 
+               color = signif_16S_ASV$arr_col, 
+               linewidth = 0.7) +
+  geom_text(data = signif_16S_ASV, 
+            aes(x = NMDS1, y = NMDS2, label = Phylum),
+            size = 8 * .352777778,
+            color = "black") +
+  
+  #arrows to show the direction of BVOC emission vectors
+  geom_segment(data = signif_16S,
+               aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
+               arrow = arrow(length = unit(2, "mm")), 
+               color = signif_16S$arr_col, 
+               linewidth = .7, 
+               linetype = signif_16S$arr_lty) +
+  geom_text(data = signif_16S, size = 8 * .352777778, 
+            aes(x = NMDS1, y = NMDS2, label = rowname), 
+            color = "black") +
+
+  
+  #stress value
+  annotate("text", 
+           x = 1.65, y = -1.05, size = 8 * .352777778, 
+           label = paste0("Stress = ", 
+                          round(nmds_16S$nmds$stress, digits = 4)))
+p_16S <- p_16S + theme(legend.position = "none")
+  
+show(p_16S)
+ggsave(plot = p_16S, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/envfit_BVOC_ASV_log_LODrev.png"), 
+       dpi = 300, width = 160, height = 160, units = "mm")
+```
+
+##ITS
+
+```{r}
+df_nmds_ITS <- data.frame(meta_ITS, nmds_ITS$nmds$points)
+
+p_ITS <- ggplot(df_nmds_ITS, mapping = aes(x = MDS1, y = MDS2)) +
+  theme_classic() + mytheme +
+  geom_point(data = df_nmds_ITS, mapping = aes(colour = population)) +
+  coord_fixed(ratio = 1) + ## need aspect ratio of 1!
+  scale_color_manual(values = col_pop, labels = c("Ajigazawa", "Azouji", "Yakushima")) +
+  labs(color = "Population") +
+  xlim(c(-1.2, 1.3)) + ylim(c(-1.2, 1.3)) +
+  
+  #arrows to show the direction of ASV abundance vectors
+  geom_segment(data = signif_ITS_ASV,
+               aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
+               arrow = arrow(length = unit(2, "mm")), 
+               color = signif_ITS_ASV$arr_col, 
+               linewidth = .7) +
+  geom_text(data = signif_ITS_ASV,
+            aes(x = NMDS1, y = NMDS2, label = Class),
+            size = 8 * .352777778) +
+  
+  #arrows to show the direction of BVOC emission vectors
+  geom_segment(data = signif_ITS,
+               aes(x = 0, xend = NMDS1, y = 0, yend = NMDS2),
+               arrow = arrow(length = unit(2, "mm")), 
+               color = signif_ITS$arr_col, 
+               linetype = signif_ITS$arr_lty,
+               linewidth = .7) +
+  geom_text(data = signif_ITS, 
+            aes(x = NMDS1 + 0.15, y = NMDS2 - 0.18, label = rowname), 
+            color = "black", size = 8 * .352777778, parse = TRUE) +
+  
+  #annotation to show the stress value
+  annotate("text", 
+           x = 0.7, y = -1.15, size = 8 * .352777778, 
+           label = paste0("Stress = ", 
+                          round(nmds_ITS$nmds$stress, digits = 4)))
+p_ITS <- p_ITS + theme(legend.position = "none")
+
+show(p_ITS)
+ggsave(plot = p_ITS, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/envfit_BVOC_ASV_log_LODrev.png"), 
+       dpi = 300, width = 160, height = 160, units = "mm")
+```
+
+#arrange two plots
+
+```{r}
+p_16S_label <- p_16S + theme(legend.position = "bottom")
+legend <- gtable_filter(ggplotGrob(p_16S_label), "guide-box")
+vp_16S_label <- p_16S + theme(legend.position = "none")
+p_16S_label <- arrangeGrob(p_16S, top = create_label("A"))
+p_ITS_label <- arrangeGrob(p_ITS, top = create_label("B"))
+
+layout <- rbind(c(1,2), c(3,3))
+
+p_two_fit <- grid.arrange(p_16S_label, p_ITS_label, legend, 
+                          layout_matrix = layout, widths = c(1, 1), heights = c(9, 1))
+ggsave(p_two_fit, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/envfit_BVOC_ASV_log_LODrev_both1.pdf"), 
+       dpi = 300, width = 160, height = 90, units = "mm", scale = 1)
+
+```
+

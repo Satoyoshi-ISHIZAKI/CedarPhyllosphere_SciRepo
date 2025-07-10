@@ -68,17 +68,23 @@ load(file = paste0(path_out, "/data/Sugi/BVOC/exp_Terpene_2209to2408_LODrev_log.
 BVOC_2306 <- exp_Ohta_nolod %>% subset(Month == "2306")
 BVOC_2306_log <- exp_Ohta_log %>% subset(Month == "2306")
 #microbial samples for AJ_002_1 and AZ_004_1 were not collected, so remove them
+BVOC_2306_az040 <- BVOC_2306 %>% subset(!(treeID %in% c("AJ_002_01", "AZ_004_01")))
+BVOC_2306_log_az040 <- BVOC_2306_log %>% subset(!(treeID %in% c("AJ_002_01", "AZ_004_01")))
+
 #fungal sample for AZ_040_1 was excluded in advance, so remove it
 BVOC_2306 <- BVOC_2306 %>% subset(!(treeID %in% c("AJ_002_01", "AZ_004_01", "AZ_040_01")))
 BVOC_2306_log <- BVOC_2306_log %>% subset(!(treeID %in% c("AJ_002_01", "AZ_004_01", "AZ_040_01")))
 
 #Longifolene is not detected in the June 2023 samples, so remove it
+BVOC_2306_az040 <- BVOC_2306_az040[, -which(colnames(BVOC_2306_az040) == "Longifolene")]
+BVOC_2306_log_az040 <- BVOC_2306_log_az040[, -which(colnames(BVOC_2306_log_az040) == "Longifolene")]
 BVOC_2306 <- BVOC_2306[, -which(colnames(BVOC_2306) == "Longifolene")]
 BVOC_2306_log <- BVOC_2306_log[, -which(colnames(BVOC_2306_log) == "Longifolene")]
 
 #remove beta-Caryophyllene from the dataframe
 bCary <- which("beta-Caryophyllene" == colnames(BVOC_2306_log)) #the column number of beta-Caryophyllene
 BVOC_2306_log_rm <- assay(BVOC_2306_log)[, -bCary] #remove beta-Caryophyllene
+BVOC_2306_log_az_040_rm <- assay(BVOC_2306_log_az040)[, -bCary] #remove beta-Caryophyllene
 ```
 
 ```{r}
@@ -91,6 +97,27 @@ SQT_2306_log <- data.frame(SQT = log(rowSums(assay(BVOC_2306[, BVOC_2306$mol_wei
   rownames_to_column(var = "sampleID")
 DT_2306_log <- data.frame(DT = log(rowSums(assay(BVOC_2306[, BVOC_2306$mol_weight == "Di"])) + 1, base = 10)) %>%
   rownames_to_column(var = "sampleID")
+
+#merge BVOC data
+all_2306_log <- BVOC_2306_log_rm %>%
+  rownames_to_column(var = "sampleID") %>%
+  full_join(BVOC_2306_total_log, by = "sampleID") %>%
+  full_join(MT_2306_log, by = "sampleID") %>%
+  full_join(SQT_2306_log, by = "sampleID") %>%
+  full_join(DT_2306_log, by = "sampleID")
+
+
+#with AZ_040_1
+#calculate log-transformed total BVOC- and MTs emission
+BVOC_2306_total_log_az040 <- data.frame(total = log(rowSums(assay(BVOC_2306_az040)), base = 10)) %>%
+  rownames_to_column(var = "sampleID")
+MT_2306_log_az040 <- data.frame(MTs = log(rowSums(assay(BVOC_2306_az040[, BVOC_2306_az040$mol_weight == "Mono"])) + 1, base = 10)) %>%
+  rownames_to_column(var = "sampleID")
+SQT_2306_log_az040 <- data.frame(SQT = log(rowSums(assay(BVOC_2306_az040[, BVOC_2306_az040$mol_weight == "Sesqui"])) + 1, base = 10)) %>%
+  rownames_to_column(var = "sampleID")
+DT_2306_log_az040 <- data.frame(DT = log(rowSums(assay(BVOC_2306_az040[, BVOC_2306_az040$mol_weight == "Di"])) + 1, base = 10)) %>%
+  rownames_to_column(var = "sampleID")
+
 
 #merge BVOC data
 all_2306_log <- BVOC_2306_log_rm %>%
@@ -261,3 +288,10 @@ ggsave(plot = p_bray,
        filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/envfit_BVOC_log_LODrev.png"), 
        dpi = 400, width = 75, height = 75, units = "mm")
 ```
+
+#NMDS_Jaccard
+
+```{r}
+
+```
+
