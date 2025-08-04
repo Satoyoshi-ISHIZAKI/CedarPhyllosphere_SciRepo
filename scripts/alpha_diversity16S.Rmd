@@ -42,6 +42,9 @@ df_rarefied <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/pro
 rownames(df_rarefied) <- formatC(as.numeric(rownames(df_rarefied)), width = 4, flag = "0") 
 #add 0 to the head of rownames
 
+otu_16S <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/otus_data_16S.csv"), row.names = 1)
+rownames(otu_16S) <- formatC(as.numeric(rownames(otu_16S)), width = 4, flag = "0")
+
 tax_table <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/tax_table2_16S.csv"), row.names = 1)
 tax_table <- as.matrix(tax_table)
 
@@ -60,6 +63,19 @@ location <- read_excel(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/proc
 #merge sample-metadata and population metadata
 metadata_loc <- left_join(metadata, location, by = "population")
 rownames(metadata_loc) <- formatC(as.numeric(rownames(metadata_loc)), width = 4, flag = "0")
+```
+
+#phyloseq
+
+```{r}
+ps_16S <- phyloseq(otu_table(t(df_rarefied), taxa_are_rows = TRUE), 
+               tax_table(tax_table), 
+               sample_data(metadata_loc), 
+               phy_tree(tree_rarefied2$data))
+
+ntaxa(ps_16S)
+sum(apply(df_rarefied > 0, 2, sum) > 0)
+sum(apply(otu_16S > 0, 2, sum) > 0)
 ```
 
 #phylogenetic distance

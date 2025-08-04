@@ -8,6 +8,8 @@ date: "2024-10-10"
 
 ```{r}
 library(tidyverse)
+library(phyloseq)
+library(readxl)
 library(vegan)
 ```
 

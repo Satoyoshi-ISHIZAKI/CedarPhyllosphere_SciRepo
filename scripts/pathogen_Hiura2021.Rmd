@@ -264,11 +264,32 @@ write_tsv(path_gs_out, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_I
 ```{r}
 path_gs_tbl <- path_gs_out %>% 
   dplyr::select(-Notes) %>%
+  #change the font for journal titles to italic
+  dplyr::mutate(Reference = str_replace(Reference, "Mycologia 87", "<i>Mycologia</i> <b>87</b>") %>%
+                  purrr::map(gt::md), 
+                .keep = "unused"
+                ) %>%
+  dplyr::mutate(Reference = str_replace(Reference, "J. Wood Sci. 53", "<i>J. Wood Sci.</i> <b>53</b>") %>%
+                  purrr::map(gt::md), 
+                .keep = "unused"
+                ) %>%
+  dplyr::mutate(`Trophic mode` = str_replace(`Trophic mode`, "Pathotroph-Saprotroph-Symbiotroph", 
+                                             "Pathotroph-Saprotroph-<br>Symbiotroph") %>%
+                  purrr::map(gt::md), 
+                .keep = "unused"
+                ) %>%
+  dplyr::mutate(Guild = str_replace(Guild, 
+                                    "Plant Pathogen-Plant Saprotroph-Undefined Saprotroph-", 
+                                    "Plant Pathogen-Plant Saprotroph-<br>Undefined Saprotroph-") %>%
+                  purrr::map(gt::md), 
+                .keep = "unused"
+                ) %>%
+  
   gt::gt() %>%
   gt::tab_style(cell_text(weight = "bold"), 
                 locations = cells_column_labels(columns = everything())) %>%
   gt::tab_style(cell_text(style = "italic"), 
-                locations = cells_body(columns = c(Genus, Species))) %>%
+                locations = cells_body(columns = c(Genus, Species))) %>% 
   gt::tab_style(cell_borders(sides = "right", color = "grey50", weight = px(1.5)), 
                 locations = cells_body(columns = Reference)) %>%
   gt::tab_style(cell_borders(sides = "right", color = "grey50", weight = px(1.5)), 
@@ -484,7 +505,7 @@ p_path <- ggplot(data = abund_plot,
               alpha = 0.05, linewidth = 0, color = NA, fill = "black") +
   geom_point() + 
   theme_classic() + mytheme +
-  xlab("Climatic PC1") + ylab("Abundance of the putative pathogenic fungi after rarefaction") + labs(color = "Functional group") + NULL
+  xlab("Climatic PC1") + ylab("Abundance of the putative pathogenic fungi after rarefaction") + labs(color = "Putative functional group") + NULL
   
 show(p_path)
 

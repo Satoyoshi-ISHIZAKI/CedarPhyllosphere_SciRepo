@@ -79,6 +79,12 @@ ter_2306_LOD <- dplyr::bind_rows(LOD, ter_2306)
 
 ```{r}
 BVOC_tbl <- ter_2306_LOD
+#omit the unused samples (microbial samples were not collected for them)
+#omit AJ_002_1 and AZ_002_1
+"%not.in%" <- Negate("%in%")
+BVOC_tbl <- BVOC_tbl %>%
+  dplyr::filter(Samplename %not.in% c("AZ_002_01", "AJ_002_01"))
+
 
 BVOC_tbl <- BVOC_tbl %>% 
   gt::gt(rowname_col = "Samplename") %>%
@@ -93,11 +99,12 @@ BVOC_tbl <- BVOC_tbl %>%
                  `gamma-Terpinene` = md("*γ*-Terpinene"), 
                  `para-Cymene` = md("*p*-Cymene"), 
                  Methyl_salicylate = md("Methyl\nSalicylate"), 
-                 `beta-Caryophyllene` = md("*β*-Caryophyllene"),
+                 `beta-Caryophyllene` = md("*β*-\nCaryophyllene"),
                  `ent-Kaurene` = md("*ent*-Kaurene")) %>%
   cols_width(everything() ~ px(1800 / (ncol(ter_2306)+1))) %>%
   tab_options(table.font.names = "Times New Roman", 
-              table.font.size = 9.5)
+              table.font.size = 14, 
+              column_labels.font.size = 12)
 
 show(BVOC_tbl)
 
