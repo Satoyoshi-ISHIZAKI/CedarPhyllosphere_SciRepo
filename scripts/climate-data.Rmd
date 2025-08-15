@@ -145,6 +145,40 @@ show(p_pca)
 ```
 
 ```{r}
+pldata <- pop_pl %>%
+  dplyr::select(1:5) %>%
+  cbind(pca_pl$x)
+
+p_pca <- ggplot(data = pldata, mapping = aes(x = PC1, y = PC2, color = latitude)) +
+  geom_text(aes(label = population), size = 10 * .352777778) +
+  geom_segment(data = pca_pl$rotation, 
+               aes(x = 0, y = 0, xend = PC1*1.85, yend = PC2*1.85), 
+               arrow = arrow(length = unit(0.2, "cm")),
+               color = "grey", linewidth = 3 * .352777778) +
+  coord_fixed(ratio = 1) +
+  theme_classic(base_size = 12) +
+  labs(color = "Latitude") +
+  mytheme +
+  NULL
+  #autoplot(pca_pl, 
+  #                data = pop_pl,
+  #                x = 1, y = 2,
+  #                shape = FALSE,
+  #                label = TRUE,
+  #                label.label = "population",
+  #                label.size = 10 * .352777778,
+  #                color = "latitude",
+  #                loadings = TRUE,
+  #                loadings.color = "grey",
+  #                loadings.linewidth = 3 * .352777778,
+  #                loadings.label = TRUE,
+  #                loadings.label.color = "black",
+  #                loadings.label.size = 10 * .352777778) +
+
+show(p_pca)
+```
+
+```{r}
 p_pca2 <- autoplot(pca_pl,
                   data = pop_pl,
                   x = 2, y = 3,

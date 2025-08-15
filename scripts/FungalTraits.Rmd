@@ -85,9 +85,82 @@ path_gs_both <- dplyr::left_join(path_gs_out,
                                  FunTr_path, 
                                  by = c("Genus" = "GENUS"))
 show(path_gs_both)
+write.csv(path_gs_both, 
+          paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/pathogen_Gs_FunTr.csv"), 
+          row.names = FALSE)
 ```
 
 **All of the fungal genera listed in Kobayashi 2007 included plant saprotrophs other than <i>Tremella</i>.**
+
+#Table
+
+```{r}
+#output a table to show the result of the functional assignment using the FungalTraits database
+path_gs_tb <- path_gs_both %>%
+  dplyr::select("Genus" = Genus,
+                "Species" = Species,
+                "Functional group" = `Functional group`,
+                "Reference" = Reference, 
+                "Primary lifestyle" = primary_lifestyle,
+                "Secondary lifestyle" = Secondary_lifestyle,
+                "Comment on lifestyle" = Comment_on_lifestyle_template,,
+                "Decay substrate" = Decay_substrate_template,
+                "Decay type" = Decay_type_template)
+path_gs_tb <- apply(path_gs_tb, 2, gsub, pattern = "_", replacement = " ")
+```
+
+```{r}
+path_gs_tbl <- as.data.frame(path_gs_tb) %>% 
+  #change the font for journal titles to italic
+  dplyr::mutate(Reference = str_replace(Reference, "Mycologia 87", "<br><i>Mycologia</i> <b>87</b>") %>%
+                  purrr::map(gt::md), 
+                .keep = "unused"
+                ) %>%
+  dplyr::mutate(Reference = str_replace(Reference, "J. Wood Sci. 53", "<br><i>J. Wood Sci.</i> <b>53</b>") %>%
+                  purrr::map(gt::md), 
+                .keep = "unused"
+                ) %>%
+  dplyr::mutate(`Comment on lifestyle` = str_replace(`Comment on lifestyle`, "some species", "<br>some species") %>%
+                  purrr::map(gt::md), 
+                .keep = "unused"
+                ) %>%
+  dplyr::mutate(`Decay substrate` = str_replace(`Decay substrate`, ",", ",<br>") %>%
+                  purrr::map(gt::md), 
+                .keep = "unused"
+                ) %>%
+  
+  gt::gt() %>%
+  gt::tab_style(cell_text(weight = "bold"), 
+                locations = cells_column_labels(columns = everything())) %>%
+  gt::tab_style(cell_text(style = "italic"), 
+                locations = cells_body(columns = c(Genus, Species))) %>% 
+  gt::tab_style(cell_borders(sides = "right", color = "grey50", weight = px(1.5)), 
+                locations = cells_body(columns = Reference)) %>%
+  gt::tab_style(cell_borders(sides = "right", color = "grey50", weight = px(1.5)), 
+                locations = cells_column_labels(columns = Reference)) %>%
+  gt::tab_footnote(footnote = "The species described in Kobayashi 2007.", 
+                   locations = cells_column_labels(columns = Species)) %>%
+  gt::tab_footnote(footnote = "The functional groups of the fungal species were inferred from previous studies.", 
+                   locations = cells_column_labels(columns = Reference)) %>%
+  gt::tab_footnote(footnote = "Species for which we have not been able to find any previous studies on their functional groups are classified as \"unknown\" functional groups.", 
+                   locations = cells_column_labels(columns = `Functional group`)) %>%
+  gt::tab_footnote(footnote = "The result of the functional assignment using the FungalTraits database is shown.", 
+                   locations = cells_column_labels(columns = c(`Primary lifestyle`, 
+                                                               `Secondary lifestyle`, 
+                                                               `Comment on lifestyle`, 
+                                                               `Decay substrate`, 
+                                                               `Decay type`))) %>%
+  opt_footnote_marks(marks = "standard") %>%
+  tab_options(table.font.names = "Times New Roman")
+
+show(path_gs_tbl)
+
+gtsave(path_gs_tbl, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/export/Pathogen_putative_FunTr.png"), 
+       zoom = 2, vwidth = 2835, vheight = 1417)
+gtsave(path_gs_tbl, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/export/Pathogen_putative_FunTr.pdf"), 
+       vwidth = 2835, vheight = 1417)
+```
+
 #GLM
 ##Saprotroph
 
@@ -282,7 +355,7 @@ p_both <- ggplot(data = pldata_both,
               alpha = 0.05, linewidth = 0, color = NA) +
   geom_point() + 
   theme_classic() + mytheme +
-  xlab("Climatic PC1") + ylab("Abundance of the putative Japanese-cedar-associated fungi \nafter rarefaction") + 
+  xlab("Climatic PC1") + ylab("Abundance of the fungi \nthat may be functionally related to Japanese cedar \nafter rarefaction") + 
   labs(color = "Putative \nfunctional group", 
        fill = "Putative \nfunctional group", 
        shape = "Putative \nfunctional group") + 

@@ -86,12 +86,12 @@ BVOC_tbl <- BVOC_tbl %>%
   dplyr::filter(Samplename %not.in% c("AZ_002_01", "AJ_002_01"))
 
 
-BVOC_tbl <- BVOC_tbl %>% 
+BVOC_tbl <- BVOC_tbl[-1, ] %>% 
   gt::gt(rowname_col = "Samplename") %>%
   gt::tab_style(cell_text(weight = "bold"), locations = cells_column_labels(columns = everything())) %>%
-  gt::tab_row_group(group = "Samplename", 
-                    rows = 2:nrow(BVOC_tbl)) %>%
-  gt::row_group_order(groups = c(NA, "Samplename"))%>%
+  #gt::tab_row_group(group = "Samplename", 
+  #                  rows = 2:nrow(BVOC_tbl)) %>%
+  #gt::row_group_order(groups = c(NA, "Samplename"))%>%
   gt::cols_label(`alpha-Pinene` = md("*α*-Pinene"), 
                  `beta-Pinene` = md("*β*-Pinene"), 
                  `alpha-Terpinene` = md("*α*-Terpinene"), 
@@ -108,9 +108,9 @@ BVOC_tbl <- BVOC_tbl %>%
 
 show(BVOC_tbl)
 
-gtsave(BVOC_tbl, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/export/BVOC_BE_LODrev.png"), 
+gtsave(BVOC_tbl, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/export/BVOC_BE_LODrev_2.png"), 
        vwidth = 2362, vheight = 1323)
-gtsave(BVOC_tbl, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/export/BVOC_BE_LODrev.pdf"), 
+gtsave(BVOC_tbl, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/export/BVOC_BE_LODrev_2.pdf"), 
        vwidth = 2362, vheight = 1323)
 ```
 
