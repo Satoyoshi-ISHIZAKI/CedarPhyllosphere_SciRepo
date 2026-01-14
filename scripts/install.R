@@ -8,63 +8,68 @@ install.packages("ggeffects")
 install.packages("ggtern")
 install.packages("chromote")
 
-##Bioconductor
+## Bioconductor
 if (!require("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
 BiocManager::install(version = "3.19")
 
-##phyloseq
+## phyloseq
 if(!requireNamespace("BiocManager")){
   install.packages("BiocManager")
   }
 BiocManager::install("phyloseq")
 
-##qiime2R
+## qiime2R
 if (!requireNamespace("devtools", quietly = TRUE)){install.packages("devtools")}
 devtools::install_github("jbisanz/qiime2R")
 
-##fantaxtic
+## fantaxtic
 if(!"devtools" %in% installed.packages()){
   install.packages("devtools")
 }
 devtools::install_github("gmteunisse/fantaxtic")
 
-##ggnested
+## ggnested
 if(!"devtools" %in% installed.packages()){
   install.packages("devtools")
 }
 devtools::install_github("gmteunisse/ggnested")
 
-##biomformat
+## biomformat
 if (!require("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
 
 BiocManager::install("biomformat")
 
-#XLconnect
+# XLconnect
 install.packages("XLConnect")
 
-#readGenAlEx
+# readGenAlEx
 install.packages("devtools")
 devtools::install_github("douglasgscofield/readGenalex")
 
-#SummarizedExperiment
+# SummarizedExperiment
 if (!require("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
 
 BiocManager::install("SummarizedExperiment")
 
-#ANCOMBC
+# ANCOMBC
 if (!requireNamespace("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
 BiocManager::install("ANCOMBC")
 
-#microbiome
-##needed for ANCOM-BC
+# microbiome
+## needed for ANCOM-BC
 if (!require("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
 BiocManager::install("microbiome")
 
-#FungalTraits
+# MaAsLin2
+if(!requireNamespace("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+BiocManager::install("Maaslin2")
+
+# FungalTraits
 devtools::install_github("ropenscilabs/datastorr")
 devtools::install_github("traitecoevo/fungaltraits")

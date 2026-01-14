@@ -53,6 +53,8 @@ garden <- read_excel(paste0(path_out, "/data/Sugi/metadata_2306.xlsx"), sheet = 
 garden$site <- as.factor(garden$site)
 ```
 
+<details><summary>Map of the population locations</summary>
+
 ```{r}
 # Download Japan map data at 1:50m scale
 japan <- ne_countries(scale = 50, country = "japan", returnclass = "sf")
@@ -84,9 +86,33 @@ map <- ggplot(data = japan) +
 
 show(map)
 # Save the map (optional)
-ggsave(plot = map, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/population_map1.pdf"), 
+#ggsave(plot = map, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/population_map1.pdf"), 
+#       width = 160, height = 130, units = "mm", dpi = 300)
+```
+
+```{r}
+map_noleg <- ggplot(data = japan) +
+  geom_sf() +
+  coord_sf(xlim = c(122, 154), ylim = c(20, 46), expand = FALSE) +
+  geom_point(data = location, aes(x = longitude, y = latitude), 
+             color = "black", size = 1) +
+  
+  coord_sf(xlim = c(120, 156), # Extended map boundaries to accommodate labels
+          ylim = c(25, 46), 
+          expand = FALSE) +
+  xlab("Longitude") + ylab("Latitude") +
+  theme_classic(base_size = 12) + theme_pt +
+  theme(axis.line = element_blank(), 
+        axis.ticks = element_blank(), 
+        axis.title = element_blank(), 
+        axis.text = element_blank())
+
+show(map_noleg)
+ggsave(plot = map_noleg, filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/population_map_noleg.png"), 
        width = 160, height = 130, units = "mm", dpi = 300)
 ```
+
+</details>
 
 #location table
 

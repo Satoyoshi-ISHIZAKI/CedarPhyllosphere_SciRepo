@@ -1,0 +1,207 @@
+---
+title: "FAPROTAX_prep"
+output: html_document
+date: "2026-01-09"
+---
+
+# Workflow to this script:
+1. Pre-processing_16S.Rmd
+2. rarefaction_16S.Rmd
+3. NMDS_16S.Rmd
+4. envfit_ASV_16S.Rmd
+5. BVOC_preprocessing.Rmd
+7. envfit_BVOC_LODrev.Rmd
+6. FAPROTAX_prep (this file)
+
+# load packages
+
+```{r}
+library(readxl)
+library(phyloseq)
+library(tidyverse)
+library(vegan)
+```
+
+<details><summary>data import</summary>
+
+# path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+# create "path" file, and define "path" as your raw-data directory(character vector) in the file
+# "path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+# source codes
+
+```{r}
+source("../R/occurrence.R")
+```
+
+# read processed data
+
+```{r import}
+# rarefied_ASV_table
+df_16S <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/df_rarefied_16S.csv"), row.names = 1)
+rownames(df_16S) <- formatC(as.numeric(rownames(df_16S)), width = 4, flag = "0") #add 0 to rownames
+
+# tax_table
+tax_16S <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/tax_table2_16S.csv"), row.names = 1)
+tax_16S <- as.matrix(tax_16S)
+
+# phylogenetic tree
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/trees.Rdata"))
+tree16S <- tree2
+tree16S_rarefied <- tree_rarefied2
+rm(list = c("tree2", "tree_rarefied2"))
+
+# metadata
+metadata <- read_excel(paste0(path_out, "/data/Sugi/metadata_2306.xlsx"), sheet = "Sheet1")
+metadata <- column_to_rownames(metadata, var = "Sample_Name")
+metadata$cloneID <- as.factor(metadata$cloneID)
+metadata$population <- as.factor(metadata$population)
+metadata$site <- as.factor(metadata$site)
+metadata$date <- as.factor(metadata$date)
+
+# load nmds output
+# load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/NMDS_bray_16S.Rdata"))
+# nmds_16S <- nmds_bray
+# rm(nmds_bray)
+
+# load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/NMDS_weightedUF_16S.Rdata"))
+# nmds_16S_UF <- nmds_UF
+# rm(nmds_UF)
+```
+
+## ps_object
+
+```{r}
+ps_16S <- phyloseq(otu_table(df_16S, taxa_are_rows = FALSE), 
+                   tax_table(tax_16S), 
+                   phy_tree(tree16S_rarefied$data), 
+                   sample_data(metadata))
+```
+
+</details>
+
+# Agglomerate at Genus level
+
+```{r}
+ps_16S_genus <- tax_glom(ps_16S, taxrank = "Genus", NArm = FALSE)
+# Percentage of OTUs unclassified at Genus level
+unclassified <- sample_sums(subset_taxa(ps_16S_genus, is.na(Genus))) / sample_sums(ps_16S_genus)
+boxplot(unclassified)
+
+# aggregate taxa with no genus-level assignment to "Unclassified_Genus"
+# merge otus devoid of genus-level classification
+ps_16S_genus_mod <- merge_taxa(ps_16S_genus, 
+                               taxa_names(subset_taxa(ps_16S_genus, is.na(Genus))), 
+                               archetype = 1)
+```
+
+
+# Convert to FAPROTAX-usable format
+
+<details><summary>Function to clean taxonomy</summary>
+
+## Function to clean taxonomy
+
+```{r}
+# Function to clean taxonomy
+clean_taxonomy <- function(tax_df) {
+  # Remove prefixes like "k__", "p__", etc.
+  tax_clean <- apply(tax_df, 2, function(x) {
+    gsub("(^|\\s)[kpcofgs]__", "", x)
+  })
+  
+  # Replace NA, empty, or unassigned with ""
+  tax_clean[is.na(tax_clean)] <- ""
+  tax_clean[tax_clean == ""] <- ""
+  tax_clean[grepl("unassigned|uncultured|Ambiguous", 
+                  tax_clean, ignore.case = TRUE)] <- ""
+  
+  return(as.data.frame(tax_clean))
+}
+```
+
+</details>
+
+## Prepare FAPROTAX input
+
+```{r}
+# Load your phyloseq object
+
+# Extract OTU table
+otu_table_matrix <- as(otu_table(ps_16S_genus), "matrix")
+otu_table_matrix_mod <- as(otu_table(ps_16S_genus_mod), "matrix")
+
+# Ensure OTUs are rows (FAPROTAX requirement)
+if(!taxa_are_rows(ps_16S_genus)){
+  otu_table_matrix <- t(otu_table_matrix)
+}
+if(!taxa_are_rows(ps_16S_genus_mod)){
+  otu_table_matrix_mod <- t(otu_table_matrix_mod)
+}
+```
+
+```{r}
+# Extract taxonomy
+tax_table_df <- as.data.frame(tax_table(ps_16S_genus))
+tax_table_mod_df <- as.data.frame(tax_table(ps_16S_genus_mod))
+
+# Apply cleaning
+tax_table_clean <- clean_taxonomy(tax_table_df)
+tax_table_mod_clean <- clean_taxonomy(tax_table_mod_df)
+
+# Recreate taxonomy string
+taxonomy_string_clean <- apply(tax_table_clean, 1, function(x) {
+  # Remove trailing semicolons from incomplete lineages
+  result <- paste(x, collapse=";")
+  result <- gsub(";+$", "", result)  # Remove trailing semicolons
+  return(result)
+})
+taxonomy_string_mod_clean <- apply(tax_table_mod_clean, 1, function(x) {
+  # Remove trailing semicolons from incomplete lineages
+  result <- paste(x, collapse=";")
+  result <- gsub(";+$", "", result)  # Remove trailing semicolons
+  return(result)
+})
+
+# Recreate input table with clean taxonomy
+faprotax_input <- data.frame(
+  taxonomy = taxonomy_string_clean,
+  otu_table_matrix,
+  check.names = FALSE
+)
+faprotax_input_mod <- data.frame(
+  taxonomy = taxonomy_string_mod_clean,
+  otu_table_matrix_mod,
+  check.names = FALSE
+)
+
+# Check if the rownames are the same
+summary(names(taxonomy_string_clean) == rownames(otu_table_matrix))
+summary(names(taxonomy_string_mod_clean) == rownames(otu_table_matrix_mod))
+# change rownames to taxonomy
+rownames(faprotax_input) <- NULL
+rownames(faprotax_input_mod) <- NULL
+faprotax_input_mod <- faprotax_input_mod %>%
+  column_to_rownames(var = "taxonomy")
+```
+
+```{r}
+write.table(faprotax_input, 
+            file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/faprotax_input.tsv"),
+            sep = "\t",
+            quote = FALSE,
+            col.names = NA,
+            row.names = TRUE)
+write.table(faprotax_input_mod, 
+            file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/faprotax_input_mod.tsv"), 
+            sep = "\t", 
+            quote = FALSE, 
+            col.names = NA, 
+            row.names = TRUE)
+```
+

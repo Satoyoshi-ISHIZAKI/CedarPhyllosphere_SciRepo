@@ -1,0 +1,371 @@
+---
+title: "FAPROTAX_analysis"
+output: html_document
+date: "2026-01-09"
+---
+
+# Workflow to this script:
+1. Pre-processing_16S.Rmd
+2. rarefaction_16S.Rmd
+3. NMDS_16S.Rmd
+4. envfit_ASV_16S.Rmd
+5. BVOC_preprocessing.Rmd
+7. envfit_BVOC_LODrev.Rmd
+6. FAPROTAX_prep
+8. FAPROTAX_analysis.Rmd (this file)
+
+# load packages
+
+```{r,include=FALSE}
+library(readxl)
+library(phyloseq)
+library(tidyverse)
+library(vegan)
+library(ggnewscale)
+library(viridis)
+library(viridisLite)
+```
+
+# path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+# create "path" file, and define "path" as your raw-data directory(character vector) in the file
+# "path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+# source codes
+
+```{r}
+source("../R/occurrence.R")
+source("../R/plot_top_taxa.R")
+source("../R/bestNMDS.R")
+```
+
+# plot theme
+
+```{r}
+mytheme <-theme(text = element_text(color = "black"), 
+                axis.text = element_text(color = "black")
+                )
+```
+
+# data import
+<details><summary>**data import**</summary><div>
+
+## 16S original data
+
+```{r import}
+# rarefied_ASV_table
+df_16S <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/df_rarefied_16S.csv"), row.names = 1)
+rownames(df_16S) <- formatC(as.numeric(rownames(df_16S)), width = 4, flag = "0") #add 0 to rownames
+
+# tax_table
+tax_16S <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/tax_table2_16S.csv"), row.names = 1)
+tax_16S <- as.matrix(tax_16S)
+
+# phylogenetic tree
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/trees.Rdata"))
+tree16S <- tree2
+tree16S_rarefied <- tree_rarefied2
+rm(list = c("tree2", "tree_rarefied2"))
+
+# metadata
+metadata <- read_excel(paste0(path_out, "/data/Sugi/metadata_2306.xlsx"), sheet = "Sheet1")
+metadata$cloneID <- as.factor(metadata$cloneID)
+metadata$population <- as.factor(metadata$population)
+metadata$site <- as.factor(metadata$site)
+metadata$date <- as.factor(metadata$date)
+
+## climatic data for the populations
+meta_clim <- read.csv(paste0(path_out, "/data/Sugi/pop_climate_pca.csv"), 
+                      row.names = 1)
+## merge climatic PCA results to metadata
+metadata <- metadata %>% 
+  left_join(meta_clim %>% dplyr::select(population, PC1_clim, PC2_clim), 
+            by = "population")
+## samplename to rowname
+metadata <- column_to_rownames(metadata, var = "Sample_Name")
+
+# load nmds output
+# load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/NMDS_bray_16S.Rdata"))
+# nmds_16S <- nmds_bray
+# rm(nmds_bray)
+
+# load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/NMDS_weightedUF_16S.Rdata"))
+# nmds_16S_UF <- nmds_UF
+# rm(nmds_UF)
+```
+
+## make the column for xlabels in metadata
+
+```{r}
+# unique labels for populations and sites
+
+site_pop <- as.factor(paste0(metadata$site, "_", metadata$population))
+sitepop_row <- sapply(levels(site_pop), grep, site_pop)
+sitepop_row <- sapply(sitepop_row, median)
+sitepop_row <- sapply(sitepop_row, floor)
+
+metadata$xlab <- rep("", nrow(metadata))
+metadata$xlab[sitepop_row] <- as.character(metadata$population[sitepop_row])
+```
+
+## FAPROTAX results
+
+```{r}
+fapro_res_mod <- read_tsv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/mod/faprotax_output_mod.tsv"))
+colnames(fapro_res_mod) <- c(colnames(fapro_res_mod[, 1]), 
+                             formatC(1:108, width = 4, flag = "0"))
+
+# assign IDs to each functional groups
+ID_df <- data.frame(ID = paste0("FG", formatC(1:nrow(fapro_res_mod), width = 3, flag = "0")), 
+                    group = fapro_res_mod$group)
+tax_FG <- ID_df %>% column_to_rownames(var = "ID")
+
+fapro_res_mod <- fapro_res_mod %>% 
+  left_join(ID_df, by = "group") %>%
+  dplyr::select(-group) %>% 
+  column_to_rownames(var = "ID")
+
+# convert to relative abundance
+# input data has been already rarefied, so convert to relative abundance based on the input library size
+fapro_res_mod <- fapro_res_mod / max(rowSums(df_16S))
+```
+
+## ps_object
+
+```{r}
+ps_fapro_res_mod <- phyloseq(otu_table(fapro_res_mod, taxa_are_rows = TRUE), 
+                             tax_table(as.matrix(tax_FG)), 
+                             sample_data(metadata))
+
+# chage group names for the unassigned taxa
+tax_table(ps_fapro_res_mod)[, "group"] <- gsub("other", "Unassigned", 
+                                               tax_table(ps_fapro_res_mod)[, "group"])
+
+# save
+save(ps_fapro_res_mod, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/ps_fapro_res_mod.Rdata"))
+```
+
+</div></details>
+
+# Barplot
+<details><summary>**Functional composition barplots**</summary><div>
+
+```{r}
+plot_fapro <- plot_top_taxa(ps_fapro_res_mod, 
+                            taxonomic_level = "group", 
+                            n_taxa = 12, 
+                            transform = "none", 
+                            sort_by = "mean", 
+                            sample_order = as.character(rownames(metadata %>% dplyr::arrange(site, desc(PC1_clim)))), 
+                            show_unassigned = TRUE)
+plot_fapro$plot <- plot_fapro$plot + 
+  facet_wrap(~site, 
+             scales = "free_x") + 
+  mytheme + theme_classic(base_size = 12) + 
+  geom_text(data = (rownames_to_column(metadata, var = "Sample") %>% 
+                      dplyr::arrange(site, desc(PC1_clim))), 
+            mapping = aes(x = Sample, y = -.07, label = xlab, fill = NULL), 
+            angle = 90, size = 4) + 
+  ylab("Relative abundance") + 
+  theme(axis.text.x = element_blank())
+
+show(plot_fapro$plot)
+
+ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/FG_barplot_16S.png"), 
+       plot = plot_fapro$plot, 
+       dpi = 300, width = 160, height = 120, units = "mm")
+```
+
+</div></details>
+
+# NMDS plot based on functional composition
+<details><summary>**NMDS**</summary><div>
+
+## NMDS
+
+```{r}
+dist_bray <- vegdist(t(otu_table(ps_fapro_res_mod)), method = "bray")
+
+# exclude functionally Unassigned taxa for NMDS
+ps_fapro_res_mod_xUA <- subset_taxa(ps_fapro_res_mod, group != "Unassigned")
+dist_bray_xUA <- vegdist(t(otu_table(ps_fapro_res_mod_xUA)), method = "bray")
+```
+
+```{r,eval=FALSE}
+nmds_fapro <- bestNMDS(dist_bray, n = 10)
+```
+
+```{r,eval=FALSE}
+nmds_fapro_xUA <- bestNMDS(dist_bray_xUA, n = 10)
+```
+
+```{r}
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/NMDS_bray_fapro.Rdata"))
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/NMDS_bray_fapro_xUA.Rdata"))
+stressplot(nmds_fapro$nmds)
+stressplot(nmds_fapro_xUA$nmds)
+nmds_fapro$nmds$stress
+nmds_fapro_xUA$nmds$stress
+# save(nmds_fapro, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/NMDS_bray_fapro.Rdata"))
+# save(nmds_fapro_xUA, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/NMDS_bray_fapro_xUA.Rdata"))
+```
+
+## envfit
+
+```{r}
+set.seed(123)
+fit_FG <- envfit(nmds_fapro$nmds, t(otu_table(subset_taxa(ps_fapro_res_mod, taxa_sums(ps_fapro_res_mod) > 0))))
+fit_FG$tax_table <- tax_table(ps_fapro_res_mod)
+show(fit_FG)
+df_fit_FG <-data.frame(tax_table(ps_fapro_res_mod)[rownames(fit_FG$vectors$arrows), "group"], 
+                        fit_FG$vectors$arrows, 
+                        r = fit_FG$vectors$r, 
+                        p = fit_FG$vectors$pvals)
+
+# excluded Unassigned taxa
+set.seed(123)
+fit_FG_xUA <- envfit(nmds_fapro_xUA$nmds, t(otu_table(subset_taxa(ps_fapro_res_mod_xUA, 
+                                                                  taxa_sums(ps_fapro_res_mod_xUA) > 0))))
+fit_FG_xUA$tax_table <- tax_table(ps_fapro_res_mod_xUA)
+show(fit_FG_xUA)
+df_fit_FG_xUA <-data.frame(tax_table(ps_fapro_res_mod_xUA)[rownames(fit_FG_xUA$vectors$arrows), "group"], 
+                           fit_FG_xUA$vectors$arrows, 
+                           r = fit_FG_xUA$vectors$r, 
+                           p = fit_FG_xUA$vectors$pvals)
+
+save(fit_FG, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/envfit_fapro_FG.Rdata"))
+save(fit_FG_xUA, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/envfit_fapro_FG_xUA.Rdata"))
+write.csv(df_fit_FG, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/envfit_fapro_FG.csv"))
+write.csv(df_fit_FG, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/envfit_fapro_FG_xUA.csv"))
+```
+
+```{r}
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/envfit_fapro_FG.Rdata"))
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/analysis/envfit_fapro_FG_xUA.Rdata"))
+
+FG_score <- scores(fit_FG, display = "vectors")
+FG_score <- rownames_to_column(data.frame(FG_score))
+FG_score <- data.frame(FG_score, 
+                       class = fit_FG$tax_table[FG_score$rowname, "group"], 
+                       p = fit_FG$vectors$pvals, 
+                       p.adj = p.adjust(fit_FG$vectors$pvals, method = "BH"), 
+                       arr_col = rep("grey", nrow(FG_score)))
+
+FG_signif <- FG_score[FG_score$p < 0.05, ]
+
+# exclude Unassigned taxa
+FG_score_xUA <- scores(fit_FG_xUA, display = "vectors")
+FG_score_xUA <- rownames_to_column(data.frame(FG_score_xUA))
+FG_score_xUA <- data.frame(FG_score_xUA, 
+                       class = fit_FG_xUA$tax_table[FG_score_xUA$rowname, "group"], 
+                       p = fit_FG_xUA$vectors$pvals, 
+                       p.adj = p.adjust(fit_FG_xUA$vectors$pvals, method = "BH"), 
+                       arr_col = rep("grey", nrow(FG_score_xUA)))
+
+FG_signif_xUA <- FG_score_xUA[FG_score_xUA$p < 0.05, ]
+```
+
+## plot
+
+```{r}
+df_nmds_fapro <- data.frame(metadata, nmds_fapro$nmds$points)
+
+p_fapro <- ggplot() +
+  geom_point(data = df_nmds_fapro[df_nmds_fapro$site == "Tsukuba", ], 
+             mapping = aes(x = MDS1, y = MDS2, color = PC1_clim)) +
+  scale_color_continuous(low = "#ffa50040", high = "#ffa500FF") +
+  labs(color = "Climatic PC1") +
+  new_scale_color() +
+  geom_point(data = df_nmds_fapro[df_nmds_fapro$site == "Kawatabi", ], 
+             mapping = aes(x = MDS1, y = MDS2, color = PC1_clim)) +
+  scale_color_continuous(low = "#19197040", high = "#191970FF") +
+  labs(color = "Climatic PC1") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
+  
+  #arrows to show the direction of ASV abundance vectors
+  geom_text(data = FG_signif,  
+            aes(x = NMDS1, y = NMDS2, label = group), 
+            size = 3.5) +
+  
+  #theme and plot range
+  theme_classic(base_size = 12) + mytheme +
+  coord_fixed(1) +
+  # xlim(-2, 2) + ylim(-2, 2) +
+  
+  #stress value
+  annotate("text", 
+           x = 1, y = -.6, size = 8 * .352777778, 
+           label = paste0("Stress = ", 
+                          round(nmds_fapro$nmds$stress, digits = 4)))
+
+show(p_fapro)
+
+ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/NMDS_bray_fapro_wide.png"), 
+       plot = p_fapro, 
+       dpi = 300, width = 160, height = 160, units = "mm")
+```
+
+```{r}
+df_nmds_fapro_xUA <- data.frame(metadata, nmds_fapro_xUA$nmds$points)
+
+p_fapro_xUA <- ggplot() +
+  geom_point(data = df_nmds_fapro_xUA[df_nmds_fapro_xUA$site == "Tsukuba", ], 
+             mapping = aes(x = MDS1, y = MDS2, color = PC1_clim)) +
+  scale_color_continuous(low = "#ffa50040", high = "#ffa500FF") +
+  labs(color = "Climatic PC1") +
+  new_scale_color() +
+  geom_point(data = df_nmds_fapro_xUA[df_nmds_fapro_xUA$site == "Kawatabi", ], 
+             mapping = aes(x = MDS1, y = MDS2, color = PC1_clim)) +
+  scale_color_continuous(low = "#19197040", high = "#191970FF") +
+  labs(color = "Climatic PC1") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
+  
+  #arrows to show the direction of ASV abundance vectors
+  geom_text(data = FG_signif_xUA,  
+            aes(x = NMDS1, y = NMDS2, label = group), 
+            size = 3.5) +
+  
+  #theme and plot range
+  theme_classic(base_size = 12) + mytheme +
+  coord_fixed(1) +
+  # xlim(-2, 2) + ylim(-2, 2) +
+  
+  #stress value
+  annotate("text", 
+           x = .75, y = -.5, size = 8 * .352777778, 
+           label = paste0("Stress = ", 
+                          round(nmds_fapro_xUA$nmds$stress, digits = 4)))
+
+show(p_fapro_xUA)
+
+ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/NMDS_bray_fapro_xUA_wide.png"), 
+       plot = p_fapro_xUA, 
+       dpi = 300, width = 160, height = 160, units = "mm")
+```
+
+</div></details>
+
+# Statistical analysis
+## PERMANOVA
+```{r}
+set.seed(123)
+model_fapro <- adonis2(dist_bray ~ site * population, 
+                       data = metadata, 
+                       permutations = 999, 
+                       by = "terms")
+model_fapro
+
+set.seed(123)
+model_fapro_xUA <- adonis2(dist_bray_xUA ~ site * population, 
+                           data = metadata, 
+                           permutataions = 999, 
+                           by = "terms")
+model_fapro_xUA
+```
+

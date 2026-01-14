@@ -6,7 +6,7 @@ date: "2025-03-04"
 
 #load
 
-```{r}
+```{r,include=FALSE}
 library(readxl)
 library(phyloseq)
 library(SummarizedExperiment)

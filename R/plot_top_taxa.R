@@ -10,7 +10,7 @@ plot_top_taxa <- function(physeq,
                           sort_by = "mean",
                           custom_colors = NULL,
                           sample_order = NULL,
-                          show_unknown = TRUE) {
+                          show_unassigned = TRUE) {
   
   # Input validation
   if (!taxonomic_level %in% rank_names(physeq)) {
@@ -38,11 +38,11 @@ plot_top_taxa <- function(physeq,
   
   # Aggregate at specified taxonomic level
   tax_table$Taxa <- tax_table[[taxonomic_level]]
-  tax_table$Taxa[is.na(tax_table$Taxa)] <- "Unknown"
+  tax_table$Taxa[is.na(tax_table$Taxa)] <- "Unassigned"
   
-  # If show_unknown is FALSE, treat "Unknown" as "Other"
-  if (!show_unknown) {
-    tax_table$Taxa[tax_table$Taxa == "Unknown"] <- "Other"
+  # If show_unassigned is FALSE, treat "Unassigned" as "Other"
+  if (!show_unassigned) {
+    tax_table$Taxa[tax_table$Taxa == "Unassigned"] <- "Other"
   }
   
   # Calculate abundance per taxa
@@ -61,9 +61,9 @@ plot_top_taxa <- function(physeq,
     ) %>%
     arrange(desc(if(sort_by == "mean") mean else total))
   
-  # Select top N taxa (excluding "Unknown" if show_unknown is FALSE)
-  if (!show_unknown) {
-    taxa_summary <- taxa_summary %>% dplyr::filter(Taxa != "Unknown")
+  # Select top N taxa (excluding "Unassigned" if show_unassigned is FALSE)
+  if (!show_unassigned) {
+    taxa_summary <- taxa_summary %>% dplyr::filter(Taxa != "Unassigned")
   }
   top_taxa <- head(taxa_summary$Taxa, n_taxa)
   
@@ -108,12 +108,13 @@ plot_top_taxa <- function(physeq,
     # Create named vector matching colors to taxa
     names(taxa_colors) <- top_taxa
     # Add "Other" with grey color
-    custom_colors <- c(taxa_colors, "Other" = "#808080")
+    custom_colors <- c(taxa_colors[names(taxa_colors) != "Unassigned"], "Unassigned" = "#a9a9a9", "Other" = "#808080")
   }
   
   # Ensure "Other" appears at the top of the stack
   plot_data$Taxa <- factor(plot_data$Taxa, 
-                           levels = c("Other", setdiff(unique(plot_data$Taxa), "Other")))
+                           levels = c("Other", "Unassigned", 
+                                      setdiff(unique(plot_data$Taxa), c("Other", "Unassigned"))))
   
   # Create the plot
   p <- ggplot(plot_data, aes(x = Sample, y = Abundance, fill = Taxa)) +

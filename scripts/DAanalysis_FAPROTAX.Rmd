@@ -1,0 +1,426 @@
+---
+title: "DAanalysis_FAPROTAX"
+output: html_document
+date: "2026-01-09"
+---
+
+# Workflow to this script:
+1. Pre-processing_16S.Rmd
+2. rarefaction_16S.Rmd
+3. NMDS_16S.Rmd
+4. envfit_ASV_16S.Rmd
+5. BVOC_preprocessing.Rmd
+7. envfit_BVOC_LODrev.Rmd
+6. FAPROTAX_prep
+8. FAPROTAX_analysis.Rmd
+9. clean_tsv_fapro.R
+10. DAanalysis_FAPROTAX.Rmd (this file)
+
+# load packages
+
+```{r,include=FALSE}
+library(readxl)
+library(phyloseq)
+library(tidyverse)
+library(Maaslin2)
+library(SummarizedExperiment)
+library(ggnewscale)
+library(viridis)
+library(viridisLite)
+```
+
+# path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+# create "path" file, and define "path" as your raw-data directory(character vector) in the file
+# "path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+# source codes
+
+```{r}
+source("../R/occurrence.R")
+source("../R/plot_top_taxa.R")
+```
+
+# plot theme
+
+```{r}
+mytheme <-theme(text = element_text(color = "black"), 
+                axis.text = element_text(color = "black")
+                )
+```
+
+# data import
+<details><summary>**data import**</summary><div>
+
+## ps_object
+
+```{r}
+load(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/ps_fapro_res_mod.Rdata"))
+
+# Detailed results of FAPROTAX
+FG_overlap <- read_tsv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/mod/group_overlaps_modc.tsv"))
+FG_g2otus <- read_tsv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/mod/groups2otus_modc.tsv"))
+
+FG_overlap <- data.frame(FG_overlap) %>% 
+  column_to_rownames(var = "...1")
+FG_g2otus <- data.frame(FG_g2otus) %>% 
+  dplyr::filter(!is.na(`...1`)) %>% 
+  column_to_rownames(var = "...1")
+```
+
+## BVOC
+
+```{r}
+#read VOC data
+load(file = paste0(path_out, "/data/Sugi/BVOC/exp_Terpene_2209to2408_LODrev_nolod.Rdata"))
+load(file = paste0(path_out, "/data/Sugi/BVOC/exp_Terpene_2209to2408_LODrev_log.Rdata"))
+
+#extract the data for June 2023
+BVOC_2306 <- exp_Ohta_nolod %>% subset(Month == "2306")
+BVOC_2306_log <- exp_Ohta_log %>% subset(Month == "2306")
+
+#Longifolene is not detected in the June 2023 samples, so remove it
+BVOC_2306 <- BVOC_2306[, -which(colnames(BVOC_2306) == "Longifolene")]
+BVOC_2306 <- BVOC_2306_log[, -which(colnames(BVOC_2306_log) == "Longifolene")]
+
+#remove beta-Caryophyllene from the dataframe
+bCary <- which("beta-Caryophyllene" == colnames(BVOC_2306_log)) #the column number of beta-Caryophyllene
+BVOC_2306_log_rm <- assay(BVOC_2306_log)[, -bCary] #remove beta-Caryophyllene
+```
+
+```{r}
+#calculate log-transformed total BVOC- and MTs emission
+BVOC_2306_total_log <- data.frame(total = log(rowSums(assay(BVOC_2306)), base = 10)) %>%
+  rownames_to_column(var = "sampleID")
+MT_2306_log <- data.frame(MTs = log(rowSums(assay(BVOC_2306[, BVOC_2306$mol_weight == "Mono"])) + 1, base = 10)) %>%
+  rownames_to_column(var = "sampleID")
+SQT_2306_log <- data.frame(SQT = log(rowSums(assay(BVOC_2306[, BVOC_2306$mol_weight == "Sesqui"])) + 1, base = 10)) %>%
+  rownames_to_column(var = "sampleID")
+DT_2306_log <- data.frame(DT = log(rowSums(assay(BVOC_2306[, BVOC_2306$mol_weight == "Di"])) + 1, base = 10)) %>%
+  rownames_to_column(var = "sampleID")
+
+#merge BVOC data
+all_2306_log <- BVOC_2306_log_rm %>%
+  rownames_to_column(var = "sampleID") %>%
+  full_join(BVOC_2306_total_log, by = "sampleID") %>%
+  full_join(MT_2306_log, by = "sampleID") %>%
+  full_join(SQT_2306_log, by = "sampleID") %>%
+  full_join(DT_2306_log, by = "sampleID")
+
+# PCA results
+load(paste0(path_out, "/data/Sugi/BVOC/pca_BVOC_2306_log_LODrev.Rdata"))
+BVOC_pca <- data.frame(pca_BVOC_log_rm_LODrev$x)
+colnames(BVOC_pca) <- paste(colnames(BVOC_pca), "ter", sep = "_")
+BVOC_pca <- BVOC_pca %>% 
+  rownames_to_column(var = "sampleID")
+
+# merge PC1:3 to all_2306_log
+all_2306_log <- all_2306_log %>% 
+  left_join(BVOC_pca %>% dplyr::select(sampleID, PC1_ter, PC2_ter, PC3_ter), by = "sampleID") %>% 
+  dplyr::filter(!is.na(PC1_ter)) %>% # remove samples with NA PC1_ter values (microbe data not available)
+  dplyr::mutate(sampleID = paste(sapply(lapply(str_split(sampleID, "_"), `[`, 1:3), paste0, collapse = "_"), 
+                                 substr(replace_na(sapply(str_split(sampleID, "_"), `[`, 4), "01"), 2, 2), 
+                                 sep = "_")
+                )
+
+```
+
+```{r}
+#merge metadata
+metadata <- data.frame(sample_data(ps_fapro_res_mod))
+metadata <- metadata %>% 
+  dplyr::mutate(sampleID = paste(paste0(substr(site, 1, 1), "2306"), 
+                                 samplename, sep = "_")
+                )
+
+metadata <- metadata %>% 
+  left_join(all_2306_log, by = "sampleID")
+rownames(metadata) <- formatC(as.numeric(rownames(metadata)), width = 4, flag = "0")
+
+# add to phyloseq
+sample_data(ps_fapro_res_mod) <- sample_data(metadata)
+```
+
+</div></details>
+
+# MaAsLin2
+<details><summary>**DA analysis with MaAsLin2**</summary><div>
+
+## Whole
+
+```{r,message=FALSE}
+DA_res <- Maaslin2(input_data = as.data.frame(t(otu_table(ps_fapro_res_mod)))[, -93], 
+                   input_metadata = data.frame(sample_data(ps_fapro_res_mod)) %>% 
+                     dplyr::select(site), 
+                   output = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/DA/Maaslin2/Whole"), 
+                   fixed_effects = c("site"), 
+                   random_effects = NULL, 
+                   analysis_method = "LM", 
+                   transform = "LOG", 
+                   normalization = "NONE", 
+                   min_abundance = 0.0, 
+                   min_prevalence = 0.1, 
+                   max_significance = 0.05, 
+                   reference = c("site,Tsukuba"), 
+                   plot_heatmap = TRUE, 
+                   plot_scatter = TRUE)
+```
+
+```{r}
+signif <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/DA/Maaslin2/Whole/significant_results.tsv"))
+fit <- read_rds(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/DA/Maaslin2/Whole/fits/fitted.rds"))
+resid <- read_rds(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/DA/Maaslin2/Whole/fits/residuals.rds"))
+fitdata_tf <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/DA/Maaslin2/Whole/features/filtered_data_norm_transformed.tsv"))
+fitdata_tf <- data.frame(fitdata_tf) %>% 
+  column_to_rownames(var = "feature")
+
+signif <-signif %>% 
+  left_join(data.frame(tax_table(ps_fapro_res_mod)) %>% 
+              rownames_to_column(var = "feature"), 
+            by = "feature")
+
+show(signif)
+```
+
+**Metabolism-related functions are positively associated with the Kawatabi common garden.**
+
+## Kawatabi
+
+```{r,message=FALSE}
+ps_fapro_k <- subset_samples(ps_fapro_res_mod, site == "Kawatabi")
+
+DA_res_k <- Maaslin2(input_data = as.data.frame(t(otu_table(ps_fapro_k)))[, -93], 
+                     input_metadata = data.frame(sample_data(ps_fapro_k)) %>% 
+                       dplyr::select(PC1_clim), 
+                     output = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/DA/Maaslin2/Kawatabi"), 
+                     fixed_effects = c("PC1_clim"), 
+                     random_effects = NULL, 
+                     analysis_method = "LM", 
+                     transform = "LOG", 
+                     normalization = "NONE", 
+                     min_abundance = 0.0, 
+                     min_prevalence = 0.1, 
+                     max_significance = 0.05, 
+                     plot_heatmap = TRUE, 
+                     plot_scatter = FALSE)
+```
+
+```{r}
+signif_k <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/DA/Maaslin2/Kawatabi/significant_results.tsv"))
+fit_k <- read_rds(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/DA/Maaslin2/Kawatabi/fits/fitted.rds"))
+resid_k <- read_rds(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/DA/Maaslin2/Kawatabi/fits/residuals.rds"))
+fitdata_tf_k <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/DA/Maaslin2/Kawatabi/features/filtered_data_norm_transformed.tsv"))
+fitdata_tf_k <- data.frame(fitdata_tf_k) %>% 
+  column_to_rownames(var = "feature")
+
+signif_k <- signif_k %>% 
+  left_join(data.frame(tax_table(ps_fapro_k)) %>% 
+              rownames_to_column(var = "feature"), 
+            by = "feature")
+
+show(signif_k)
+```
+
+## Tsukuba
+
+```{r}
+ps_fapro_t <- subset_samples(ps_fapro_res_mod, site == "Tsukuba")
+
+DA_res_t <- Maaslin2(input_data = as.data.frame(t(otu_table(ps_fapro_t)))[, -93], 
+                     input_metadata = data.frame(sample_data(ps_fapro_t)) %>% 
+                       dplyr::select(PC1_clim), 
+                     output = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/DA/Maaslin2/Tsukuba"), 
+                     fixed_effects = c("PC1_clim"), 
+                     random_effects = NULL, 
+                     analysis_method = "LM", 
+                     transform = "LOG", 
+                     normalization = "NONE", 
+                     min_abundance = 0.0, 
+                     min_prevalence = 0.1, 
+                     max_significance = 0.05, 
+                     plot_heatmap = TRUE, 
+                     plot_scatter = FALSE)
+```
+
+```{r}
+signif_t <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/DA/Maaslin2/Tsukuba/significant_results.tsv"))
+
+show(signif_t)
+```
+
+**No functions were significantly associated with the climatic PC1 in Tsukuba.**
+<br>**See details of the entire analysis and Kawatabi-specific analysis.**
+
+</div></details>
+
+# Results
+
+```{r}
+show(signif)
+show(signif_k)
+```
+
+## See overlaps among significant functions
+<details><summary>Overlaps</summary></div>
+
+```{r}
+# FG overlap for significant functions
+FG_overlap_w <- FG_overlap %>% 
+  dplyr::filter(rownames(FG_overlap) %in% signif$group) %>% 
+  dplyr::select(sort(signif$group)) %>% 
+  rownames_to_column(var = "group") %>% 
+  dplyr::arrange(group) %>% 
+  column_to_rownames(var = "group")
+
+# Kawatabi-specific results
+FG_overlap_k <- FG_overlap %>% 
+  dplyr::filter(rownames(FG_overlap) %in% signif_k$group) %>% 
+  dplyr::select(sort(signif_k$group)) %>% 
+  rownames_to_column(var = "group") %>% 
+  dplyr::arrange(group) %>% 
+  column_to_rownames(var = "group")
+```
+
+```{r}
+# overlap based on relative abundances
+FG_overlap_ab_w <- ps_fapro_res_mod %>% 
+  prune_taxa(taxa = signif$feature) %>% # keep only significant functions
+  otu_table() %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "feature") %>% # convert features to groups
+  left_join(signif %>% 
+              dplyr::select(feature, group), 
+            by = "feature") %>% 
+  column_to_rownames(var = "group") %>% # keep groups as rownames
+  dplyr::select(-feature) %>% 
+  vegdist(method = "bray") %>% 
+  as.matrix()
+FG_overlap_ab_w <- data.frame(1 - FG_overlap_ab_w)
+
+FG_overlab_ab_k <- ps_fapro_k %>% 
+  prune_taxa(taxa = signif_k$feature) %>% # keep only significant functions
+  otu_table() %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "feature") %>% # convert features to groups
+  left_join(signif_k %>% 
+              dplyr::select(feature, group), 
+            by = "feature") %>% 
+  column_to_rownames(var = "group") %>% # keep groups as rownames
+  dplyr::select(-feature) %>% 
+  vegdist(method = "bray") %>% 
+  as.matrix()
+FG_overlab_ab_k <- data.frame(1 - FG_overlab_ab_k)
+```
+
+### heatmap
+
+```{r}
+# whole data
+heat_w <- ggplot(data = FG_overlap_w %>%  
+                   rownames_to_column(var = "groups_r")%>% 
+                   pivot_longer(names_to = "groups_c", values_to = "overlaps", cols = -groups_r), 
+                 mapping = aes(x = groups_c, y = groups_r, fill = overlaps)) + 
+  geom_tile(color = "white") + 
+  theme_classic(base_size = 12) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+show(heat_w)
+
+# kawatabi
+heat_k <- ggplot(data = FG_overlap_k %>%  
+                   rownames_to_column(var = "groups_r")%>% 
+                   pivot_longer(names_to = "groups_c", values_to = "overlaps", cols = -groups_r), 
+                 mapping = aes(x = groups_c, y = groups_r, fill = overlaps)) + 
+  geom_tile(color = "white") + 
+  theme_classic(base_size = 12) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+show(heat_k)
+
+ggsave(filename = paste0(path_out, 
+                         "/231202_Sugi_phyllosphere_June_16S/processed_data/DA/Maaslin2/Kawatabi/figures/FG_overlap_k.png"), 
+       plot = heat_k, 
+       width = 160, height = 120, units = "mm", dpi = 300)
+```
+
+### heatmap based on relative abundances
+
+```{r}
+# whole data
+df_heat <- FG_overlap_ab_w %>%  
+  rownames_to_column(var = "groups_r")%>% 
+  pivot_longer(names_to = "groups_c", values_to = "overlaps", cols = -groups_r)
+heat_ab_w <- ggplot(data = df_heat, 
+                 mapping = aes(x = groups_c, y = groups_r, fill = overlaps)) + 
+  geom_tile(color = "white") + 
+  theme_classic(base_size = 12) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+show(heat_ab_w)
+
+# kawatabi
+df_heat_k <- FG_overlab_ab_k %>%  
+  rownames_to_column(var = "groups_r")%>% 
+  pivot_longer(names_to = "groups_c", values_to = "overlaps", cols = -groups_r)
+heat_ab_k <- ggplot(data = df_heat_k, 
+                 mapping = aes(x = groups_c, y = groups_r, fill = overlaps)) + 
+  geom_tile(color = "white") + 
+  theme_classic(base_size = 12) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+show(heat_ab_k)
+
+ggsave(filename = paste0(path_out, 
+                         "/231202_Sugi_phyllosphere_June_16S/processed_data/DA/Maaslin2/Kawatabi/figures/FG_overlap_k_RA.png"), 
+       plot = heat_ab_k, 
+       width = 160, height = 120, units = "mm", dpi = 300)
+```
+
+**Human_pathogens_all and human_associated was completely matched.**
+<br>**Major methanotroph/methylotroph/hydrocarbon-degradator is probably the same, resulting in > 90% overlap in RA.**
+<br>**Major human_associated bacteria and animal_parasites is probably the same.**
+<br>**Treat them as the same functions.**
+
+</div></details>
+
+## scatter plot
+
+```{r}
+pldata_tf_k <- fitdata_tf_k %>% 
+  dplyr::select(signif_k$feature) %>% 
+  rownames_to_column(var = "rownames") %>% 
+  left_join(data.frame(sample_data(ps_fapro_k)) %>% 
+              rownames_to_column(var = "rownames") %>% 
+              dplyr::select(rownames, PC1_clim), 
+            by = "rownames") %>% 
+  pivot_longer(names_to = "feature", values_to = "log2RA", cols = -c(rownames, PC1_clim))
+```
+
+
+```{r}
+features_sig <- signif_k$feature
+plots <- list()
+
+for (i in 1:length(features_sig)) {
+  p <- ggplot(data = pldata_tf_k %>% dplyr::filter(feature == features_sig[i]), 
+              mapping = aes(x = PC1_clim, y = log2RA)) + 
+    geom_point() + 
+    stat_smooth(method = "glm", 
+                linewidth = 0.5, 
+                color = 'blue', 
+                na.rm = TRUE) + 
+    xlab("Climatic PC1") + 
+    ylab(bquote("Log2 relative abundance of " ~ .(signif_k[signif_k$feature == features_sig[i], ]$group))) + 
+    theme_classic(base_size = 12)
+  
+  plots[[i]] <- p
+  ggsave(filename = paste0(path_out, 
+                           "/231202_Sugi_phyllosphere_June_16S/processed_data/DA/Maaslin2/Kawatabi/figures/", 
+                           signif_k[signif_k$feature == features_sig[i], ]$group, ".png"), 
+         plot = p, 
+         width = 160, height = 120, units = "mm", dpi = 300)
+}
+
+names(plots) <- signif_k$group
+plots[["methylotrophy"]]
+```
