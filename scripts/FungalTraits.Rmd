@@ -68,7 +68,6 @@ load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/phylose
 \n**Use "FungalTraitss"**
 
 ```{r}
-#FungalTraits assumes the ITS sequencing data with species-level taxonomic information for guild assignment, but the targeted ASVs are assigned to the genus level taxonomies only.
 FunTr <- read.csv(paste0(path_out, "/data/Sugi/FungalTraits/FungalTraits 1.2_ver_16Dec_2020 - V.1.2.csv"))
 
 FunTr_path <- FunTr %>%

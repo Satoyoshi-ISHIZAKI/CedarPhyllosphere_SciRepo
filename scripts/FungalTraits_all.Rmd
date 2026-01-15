@@ -1,0 +1,698 @@
+---
+title: "FungalTraits_all"
+output: html_document
+date: "2026-01-09"
+---
+
+# Workflow to this script:
+1. Pre-processing_ITS.Rmd
+2. rarefaction_ITS.Rmd
+3. NMDS_ITS.Rmd
+4. envfit_ASV_ITS.Rmd
+5. BVOC_preprocessing.Rmd
+6. envfit_BVOC_LODrev.Rmd
+7. FungalTraits.Rmd
+8. FungalTraits_all.Rmd (this file)
+
+# load packages
+
+```{r}
+library(readxl)
+library(phyloseq)
+library(tidyverse)
+library(vegan)
+library(ggnewscale)
+library(viridis)
+library(viridisLite)
+```
+
+# data import
+<details><summary>**data import**</summary><div>
+
+## path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+# create "path" file, and define "path" as your raw-data directory(character vector) in the file
+# "path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+# source codes
+
+```{r}
+source("../R/occurrence.R")
+source("../R/plot_top_taxa.R")
+source("../R/bestNMDS.R")
+```
+
+# theme
+
+```{r}
+mytheme <-theme(text = element_text(color = "black"), 
+                axis.text = element_text(color = "black")
+                )
+```
+
+# read processed data
+
+```{r import}
+# rarefied_ASV_table
+df_ITS <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/df_rarefied_ITS.csv"), row.names = 1)
+rownames(df_ITS) <- formatC(as.numeric(rownames(df_ITS)), width = 4, flag = "0") #add 0 to rownames
+
+# tax_table
+tax_ITS <- read.csv(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/tax_table2_ITS.csv"), row.names = 1)
+tax_ITS <- as.matrix(tax_ITS)
+
+# phylogenetic tree
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/trees.Rdata"))
+treeITS <- tree2
+treeITS_rarefied <- tree_rarefied2
+rm(list = c("tree2", "tree_rarefied2"))
+
+# metadata
+metadata <- read_excel(paste0(path_out, "/data/Sugi/metadata_2306.xlsx"), sheet = "Sheet1")
+metadata$cloneID <- as.factor(metadata$cloneID)
+metadata$population <- as.factor(metadata$population)
+metadata$site <- as.factor(metadata$site)
+metadata$date <- as.factor(metadata$date)
+
+## climatic data for the populations
+meta_clim <- read.csv(paste0(path_out, "/data/Sugi/pop_climate_pca.csv"), 
+                      row.names = 1)
+## merge climatic PCA results to metadata
+metadata <- metadata %>% 
+  left_join(meta_clim %>% dplyr::select(population, PC1_clim, PC2_clim), 
+            by = "population")
+## samplename to rowname
+metadata <- column_to_rownames(metadata, var = "Sample_Name")
+
+# load nmds output
+# load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/NMDS_bray_ITS.Rdata"))
+# nmds_ITS <- nmds_bray
+# rm(nmds_bray)
+
+# load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/NMDS_weightedUF_ITS.Rdata"))
+# nmds_ITS_UF <- nmds_UF
+# rm(nmds_UF)
+```
+
+## make the column for xlabels in metadata
+
+```{r}
+# unique labels for populations and sites
+
+site_pop <- as.factor(paste0(metadata$site, "_", metadata$population))
+sitepop_row <- sapply(levels(site_pop), grep, site_pop)
+sitepop_row <- sapply(sitepop_row, median)
+sitepop_row <- sapply(sitepop_row, floor)
+
+metadata$xlab <- rep("", nrow(metadata))
+metadata$xlab[sitepop_row] <- as.character(metadata$population[sitepop_row])
+```
+
+## FungalTraits
+
+```{r}
+# FungalTrait database
+FunTr <- read.csv(paste0(path_out, "/data/Sugi/FungalTraits/FungalTraits 1.2_ver_16Dec_2020 - V.1.2.csv"))
+
+FunTr_prim <- FunTr %>% 
+  dplyr::select(GENUS, 
+                primary_lifestyle, 
+                Plant_pathogenic_capacity_template, 
+                Decay_substrate_template, 
+                Decay_type_template)
+```
+
+## ps_object
+
+```{r}
+ps_ITS <- phyloseq(otu_table(t(df_ITS), taxa_are_rows = TRUE), 
+                   tax_table(tax_ITS), 
+                   phy_tree(treeITS_rarefied$data), 
+                   sample_data(metadata))
+```
+
+**Data import.**
+
+</div></details>
+
+# Genus level assignment ratio
+<details><summary>**Genus level barplot**</summary><div>
+
+## Agglomerate at Genus level
+
+```{r}
+ps_ITS_test <- ps_ITS
+tax_table(ps_ITS_test) <- as.matrix((gsub(".+Incertae_sedis", NA, as.matrix(tax_table(ps_ITS_test)))))
+ps_ITS_genus <- tax_glom(ps_ITS_test, taxrank = "Genus", NArm = FALSE)
+
+# aggregate taxa with no genus-level assignment to "Unclassified_Genus"
+# merge otus devoid of genus-level classification
+ps_ITS_genus_mod <- merge_taxa(ps_ITS_genus, 
+                               taxa_names(subset_taxa(ps_ITS_genus, is.na(Genus)))
+                               )
+```
+
+## Barplot
+
+```{r}
+plot_g <- plot_top_taxa(ps_ITS_genus_mod, 
+                        taxonomic_level = "Genus", 
+                        n_taxa = 12, 
+                        transform = "relative", 
+                        sort_by = "mean", 
+                        sample_order = as.character(rownames(metadata %>% dplyr::arrange(site, desc(PC1_clim)))), 
+                        show_unassigned = TRUE)
+plot_g$plot <- plot_g$plot + 
+  geom_text(data = (rownames_to_column(metadata, var = "Sample") %>% 
+                      dplyr::arrange(site, desc(PC1_clim))
+                    ), 
+            mapping = aes(x = Sample, y = -5, label = xlab, fill = NULL), 
+            angle = 90, size = 4) + 
+  facet_wrap(~site, 
+             scales = "free_x") + 
+  mytheme + theme_classic(base_size = 12) + 
+  ylab("Relative abundance (%)") + 
+  theme(axis.text.x = element_blank())
+
+show(plot_g$plot)
+
+ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/barplot_Genus.png"), 
+       plot = plot_g$plot, 
+       dpi = 300, width = 160, height = 120, units = "mm")
+
+# Percentage of OTUs unclassified at Genus level
+unclassified <- sample_sums(subset_taxa(ps_ITS_genus_mod, is.na(Genus))) / sample_sums(ps_ITS_genus_mod)
+summary(unclassified)
+```
+
+**About 60-75% of reads were not assigned taxonomy at genus level. **
+
+</div></details>
+
+# Functional assignment with FungalTraits
+
+```{r}
+ps_ITS_FG <- ps_ITS_genus_mod
+FunTr_prim[FunTr_prim == ""] <- NA
+
+## Function table
+tax_FG <- data.frame(tax_table(ps_ITS_FG)) %>% 
+  rownames_to_column(var = "ASVs") %>% 
+  left_join(FunTr_prim, 
+            by = c("Genus" = "GENUS"))
+
+## ps with functional table
+tax_table(ps_ITS_FG) <- tax_FG %>% 
+  column_to_rownames(var = "ASVs") %>% 
+  dplyr::select(primary_lifestyle, everything()) %>% 
+  as.matrix()
+
+## aggregate at functional level
+ps_ITS_FG <- tax_glom(ps_ITS_FG, taxrank = "primary_lifestyle", NArm = FALSE)
+## convert NA to Unassigned
+tax_table(ps_ITS_FG)[is.na(tax_table(ps_ITS_FG)[, "primary_lifestyle"]), 
+                     "primary_lifestyle"
+                     ] <- "Unassigned"
+
+# ps: plant pathogenecity-based
+tax_PP <- tax_FG %>%
+  dplyr::mutate(PP = primary_lifestyle, PPC = Plant_pathogenic_capacity_template) %>% 
+  dplyr::select(-Plant_pathogenic_capacity_template)
+tax_PP[grep("pathogen", tax_PP$PPC), "PP"] <- tax_PP[grep("pathogen", tax_PP$PPC), "PPC"] # repalce FG with plant_pathogen if pathogen
+
+ps_ITS_PP <- ps_ITS_genus_mod
+tax_table(ps_ITS_PP) <- tax_PP %>% 
+  column_to_rownames(var = "ASVs") %>% 
+  dplyr::select(PP, everything()) %>% 
+  as.matrix()
+
+ps_ITS_PP <- tax_glom(ps_ITS_PP, taxrank = "PP", NArm = FALSE)
+## convert NA to Unassigned
+tax_table(ps_ITS_PP)[is.na(tax_table(ps_ITS_PP)[, "PP"]), "PP"] <- "Unassigned"
+
+# convert to relative abundances
+ps_ITS_FG <- transform_sample_counts(ps_ITS_FG, function(x) x / sum(x))
+ps_ITS_PP <- transform_sample_counts(ps_ITS_PP, function(x) x / sum(x))
+
+# save ps and function table
+save(ps_ITS_FG, 
+     file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/ps_ITS_FG.Rdata"))
+save(ps_ITS_PP, 
+     file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/ps_ITS_PP.Rdata"))
+write_tsv(tax_FG, 
+          file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/ASVs_FungalTraits.tsv"))
+```
+
+## Barplot
+<details><summary>**Barplot of functional groups**</summary><div>
+
+### Primary lifestyle
+
+```{r}
+ps_FG_bar <- ps_ITS_FG
+tax_table(ps_FG_bar) <- tax_table(ps_FG_bar) %>% 
+  data.frame() %>% 
+  dplyr::mutate(primary_lifestyle = str_to_sentence(gsub("_", " ", primary_lifestyle))) %>% 
+  as.matrix() %>% 
+  tax_table()
+
+plot_fg <- plot_top_taxa(ps_FG_bar, 
+                         taxonomic_level = "primary_lifestyle", 
+                         n_taxa = 12, 
+                         transform = "none", 
+                         sort_by = "mean", 
+                         sample_order = as.character(rownames(metadata %>% dplyr::arrange(site, desc(PC1_clim)))), 
+                         show_unassigned = TRUE)
+plot_fg$plot <- plot_fg$plot + 
+  facet_wrap(~site, 
+             scales = "free_x") + 
+  mytheme + theme_classic(base_size = 12) + 
+  geom_text(data = (rownames_to_column(metadata, var = "Sample") %>% 
+                      dplyr::arrange(site, desc(PC1_clim))), 
+            mapping = aes(x = Sample, y = -.07, label = xlab, fill = NULL), 
+            angle = 90, size = 4) + 
+  ylab("Relative abundance") + 
+  labs(fill = "Functional groups") + 
+  theme(axis.text.x = element_blank())
+
+show(plot_fg$plot)
+
+ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/FG_barplot_ITS.png"), 
+       plot = plot_fg$plot, 
+       dpi = 300, width = 160, height = 120, units = "mm")
+```
+
+### Plant pathogenic capacity
+
+```{r}
+ps_PP_bar <- ps_ITS_PP
+tax_table(ps_PP_bar) <- tax_table(ps_PP_bar) %>% 
+  data.frame() %>% 
+  dplyr::mutate(PP = str_to_sentence(gsub("_", " ", PP))) %>% 
+  as.matrix() %>% 
+  tax_table()
+
+plot_pp <- plot_top_taxa(ps_PP_bar, 
+                         taxonomic_level = "PP", 
+                         n_taxa = 12, 
+                         transform = "none", 
+                         sort_by = "mean", 
+                         sample_order = as.character(rownames(metadata %>% dplyr::arrange(site, desc(PC1_clim)))), 
+                         show_unassigned = TRUE)
+plot_pp$plot <- plot_pp$plot + 
+  facet_wrap(~site, 
+             scales = "free_x") + 
+  mytheme + theme_classic(base_size = 12) + 
+  geom_text(data = (rownames_to_column(metadata, var = "Sample") %>% 
+                      dplyr::arrange(site, desc(PC1_clim))), 
+            mapping = aes(x = Sample, y = -.07, label = xlab, fill = NULL), 
+            angle = 90, size = 4) + 
+  ylab("Relative abundance") + 
+  labs(fill = "Functional groups") + 
+  theme(axis.text.x = element_blank())
+
+show(plot_pp$plot)
+
+ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/FG_barplot_ITS_PPCbased.png"), 
+       plot = plot_pp$plot, 
+       dpi = 300, width = 160, height = 120, units = "mm")
+```
+
+**About 65-70% of reads were unassigned with functional groups.**
+<br>**Lichen parasite was abundant in Tsukuba, whereas wood saprotroph and leaf/fruit/seed pathogen were abundant in Kawatabi.**
+<br>**Climate clines are not obvious in barplots.**
+
+</div></details>
+
+# NMDS plot based on functional composition
+<details><summary>**NMDS**</summary><div>
+
+## NMDS
+
+```{r}
+dist_bray <- vegdist(t(otu_table(ps_ITS_FG)), method = "bray")
+
+# exclude functionally Unassigned taxa for NMDS
+ps_ITS_FG_xUA <- subset_taxa(ps_ITS_FG, primary_lifestyle != "Unassigned")
+# exclude zero-sum samples
+ps_ITS_FG_xUA <- subset_samples(ps_ITS_FG_xUA, 
+                                sample_sums(ps_ITS_FG_xUA) > 0)
+dist_bray_xUA <- vegdist(t(otu_table(ps_ITS_FG_xUA)), method = "bray")
+
+# PPC based
+dist_bray_PP <- vegdist(t(otu_table(ps_ITS_PP)), method = "bray")
+
+# exclude functionally Unassigned taxa for NMDS
+ps_ITS_PP_xUA <- subset_taxa(ps_ITS_PP, PP != "Unassigned")
+# exclude zero-sum samples
+ps_ITS_PP_xUA <- subset_samples(ps_ITS_PP_xUA, 
+                                sample_sums(ps_ITS_PP_xUA) > 0)
+dist_bray_PP_xUA <- vegdist(t(otu_table(ps_ITS_PP_xUA)), method = "bray")
+```
+
+```{r,eval=FALSE}
+nmds_FG <- bestNMDS(dist_bray, n = 10)
+nmds_PP <- bestNMDS(dist_bray_PP, n = 10)
+```
+
+```{r,eval=FALSE}
+nmds_FG_xUA <- bestNMDS(dist_bray_xUA, n = 10)
+nmds_PP_xUA <- bestNMDS(dist_bray_PP_xUA, n = 10)
+```
+
+```{r}
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/NMDS_bray_FGPP.Rdata"))
+load(paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/NMDS_bray_FGPP_xUA.Rdata"))
+stressplot(nmds_FG$nmds)
+stressplot(nmds_PP$nmds)
+stressplot(nmds_FG_xUA$nmds)
+stressplot(nmds_PP_xUA$nmds)
+nmds_FG$nmds$stress
+nmds_PP$nmds$stress
+nmds_FG_xUA$nmds$stress
+nmds_PP_xUA$nmds$stress
+# save(nmds_FG, nmds_PP, 
+#      file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/NMDS_bray_FGPP.Rdata"))
+# save(nmds_FG_xUA, nmds_PP_xUA, 
+#      file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/NMDS_bray_FGPP_xUA.Rdata"))
+```
+
+## envfit
+
+```{r}
+set.seed(123)
+fit_FG <- envfit(nmds_FG$nmds, t(otu_table(ps_ITS_FG)))
+fit_FG$tax_table <- tax_table(ps_ITS_FG)
+show(fit_FG)
+df_fit_FG <-data.frame(tax_table(ps_ITS_FG)[rownames(fit_FG$vectors$arrows), "primary_lifestyle"], 
+                        fit_FG$vectors$arrows, 
+                        r = fit_FG$vectors$r, 
+                        p = fit_FG$vectors$pvals)
+## PPC based
+set.seed(123)
+fit_PP <- envfit(nmds_PP$nmds, t(otu_table(ps_ITS_PP)))
+fit_PP$tax_table <- tax_table(ps_ITS_PP)
+show(fit_PP)
+df_fit_PP <-data.frame(tax_table(ps_ITS_PP)[rownames(fit_PP$vectors$arrows), "PP"], 
+                        fit_PP$vectors$arrows, 
+                        r = fit_PP$vectors$r, 
+                        p = fit_PP$vectors$pvals)
+
+# excluded Unassigned taxa
+set.seed(123)
+fit_FG_xUA <- envfit(nmds_FG_xUA$nmds, t(otu_table(subset_taxa(ps_ITS_FG_xUA, 
+                                                                  taxa_sums(ps_ITS_FG_xUA) > 0))))
+fit_FG_xUA$tax_table <- tax_table(ps_ITS_FG_xUA)
+show(fit_FG_xUA)
+df_fit_FG_xUA <-data.frame(tax_table(ps_ITS_FG_xUA)[rownames(fit_FG_xUA$vectors$arrows), "primary_lifestyle"], 
+                           fit_FG_xUA$vectors$arrows, 
+                           r = fit_FG_xUA$vectors$r, 
+                           p = fit_FG_xUA$vectors$pvals)
+## PPC based
+set.seed(123)
+fit_PP_xUA <- envfit(nmds_PP_xUA$nmds, t(otu_table(subset_taxa(ps_ITS_PP_xUA, 
+                                                                  taxa_sums(ps_ITS_PP_xUA) > 0))))
+fit_PP_xUA$tax_table <- tax_table(ps_ITS_PP_xUA)
+show(fit_PP_xUA)
+df_fit_PP_xUA <-data.frame(tax_table(ps_ITS_PP_xUA)[rownames(fit_PP_xUA$vectors$arrows), "PP"], 
+                           fit_PP_xUA$vectors$arrows, 
+                           r = fit_PP_xUA$vectors$r, 
+                           p = fit_PP_xUA$vectors$pvals)
+
+save(fit_FG, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/envfit_FT_FG.Rdata"))
+save(fit_FG_xUA, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/envfit_FT_FG_xUA.Rdata"))
+save(fit_PP, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/envfit_FT_PP.Rdata"))
+save(fit_PP_xUA, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/envfit_FT_PP_xUA.Rdata"))
+write.csv(df_fit_FG, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/envfit_FT_FG.csv"))
+write.csv(df_fit_FG_xUA, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/envfit_FT_FG_xUA.csv"))
+write.csv(df_fit_PP, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/envfit_FT_PP.csv"))
+write.csv(df_fit_PP_xUA, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/envfit_FT_PP_xUA.csv"))
+```
+
+```{r}
+load(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/envfit_FT_FG.Rdata"))
+load(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/envfit_FT_FG_xUA.Rdata"))
+load(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/envfit_FT_PP.Rdata"))
+load(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/analysis/envfit_FT_PP_xUA.Rdata"))
+
+FG_score <- scores(fit_FG, display = "vectors")
+FG_score <- rownames_to_column(data.frame(FG_score))
+FG_score <- data.frame(FG_score, 
+                       class = fit_FG$tax_table[FG_score$rowname, "primary_lifestyle"], 
+                       p = fit_FG$vectors$pvals, 
+                       p.adj = p.adjust(fit_FG$vectors$pvals, method = "BH"), 
+                       arr_col = rep("grey", nrow(FG_score)))
+
+FG_signif <- FG_score[FG_score$p < 0.05, ]
+
+## PPC based
+PP_score <- scores(fit_PP, display = "vectors")
+PP_score <- rownames_to_column(data.frame(PP_score))
+PP_score <- data.frame(PP_score, 
+                       class = fit_PP$tax_table[PP_score$rowname, "PP"], 
+                       p = fit_PP$vectors$pvals, 
+                       p.adj = p.adjust(fit_PP$vectors$pvals, method = "BH"), 
+                       arr_col = rep("grey", nrow(PP_score)))
+
+PP_signif <- PP_score[PP_score$p < 0.05, ]
+
+# exclude Unassigned taxa
+FG_score_xUA <- scores(fit_FG_xUA, display = "vectors")
+FG_score_xUA <- rownames_to_column(data.frame(FG_score_xUA))
+FG_score_xUA <- data.frame(FG_score_xUA, 
+                       class = fit_FG_xUA$tax_table[FG_score_xUA$rowname, "primary_lifestyle"], 
+                       p = fit_FG_xUA$vectors$pvals, 
+                       p.adj = p.adjust(fit_FG_xUA$vectors$pvals, method = "BH"), 
+                       arr_col = rep("grey", nrow(FG_score_xUA)))
+
+FG_signif_xUA <- FG_score_xUA[FG_score_xUA$p < 0.05, ]
+
+## PPC based
+PP_score_xUA <- scores(fit_PP_xUA, display = "vectors")
+PP_score_xUA <- rownames_to_column(data.frame(PP_score_xUA))
+PP_score_xUA <- data.frame(PP_score_xUA, 
+                       class = fit_PP_xUA$tax_table[PP_score_xUA$rowname, "PP"], 
+                       p = fit_PP_xUA$vectors$pvals, 
+                       p.adj = p.adjust(fit_PP_xUA$vectors$pvals, method = "BH"), 
+                       arr_col = rep("grey", nrow(PP_score_xUA)))
+
+PP_signif_xUA <- PP_score_xUA[PP_score_xUA$p < 0.05, ]
+```
+
+## plot
+### total
+
+```{r}
+# primary lifestyle based
+df_nmds_FG <- data.frame(metadata, nmds_FG$nmds$points)
+
+p_FG <- ggplot() +
+  geom_point(data = df_nmds_FG[df_nmds_FG$site == "Tsukuba", ], 
+             mapping = aes(x = MDS1, y = MDS2, color = PC1_clim)) +
+  scale_color_continuous(low = "#ffa50040", high = "#ffa500FF") +
+  labs(color = "Climatic PC1") +
+  new_scale_color() +
+  geom_point(data = df_nmds_FG[df_nmds_FG$site == "Kawatabi", ], 
+             mapping = aes(x = MDS1, y = MDS2, color = PC1_clim)) +
+  scale_color_continuous(low = "#19197040", high = "#191970FF") +
+  labs(color = "Climatic PC1") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
+  
+  #arrows to show the direction of ASV abundance vectors
+  geom_text(data = FG_signif %>% 
+              dplyr::mutate(primary_lifestyle = str_to_sentence(gsub("_", " ", primary_lifestyle))), 
+            aes(x = NMDS1, y = NMDS2, label = primary_lifestyle), 
+            size = 3.5) +
+  
+  #theme and plot range
+  theme_classic(base_size = 12) + mytheme +
+  coord_fixed(1) +
+  # xlim(-2, 2) + ylim(-2, 2) +
+  
+  #stress value
+  annotate("text", 
+           x = .5, y = -.5, size = 8 * .352777778, 
+           label = paste0("Stress = ", 
+                          round(nmds_FG$nmds$stress, digits = 4)))
+
+show(p_FG)
+
+ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/NMDS_bray_FG_wide.png"), 
+       plot = p_FG, 
+       dpi = 300, width = 160, height = 160, units = "mm")
+```
+
+```{r}
+# PPC based
+# primary lifestyle based
+df_nmds_PP <- data.frame(metadata, nmds_PP$nmds$points)
+
+p_PP <- ggplot() +
+  geom_point(data = df_nmds_PP[df_nmds_PP$site == "Tsukuba", ], 
+             mapping = aes(x = MDS1, y = MDS2, color = PC1_clim)) +
+  scale_color_continuous(low = "#ffa50040", high = "#ffa500FF") +
+  labs(color = "Climatic PC1") +
+  new_scale_color() +
+  geom_point(data = df_nmds_PP[df_nmds_PP$site == "Kawatabi", ], 
+             mapping = aes(x = MDS1, y = MDS2, color = PC1_clim)) +
+  scale_color_continuous(low = "#19197040", high = "#191970FF") +
+  labs(color = "Climatic PC1") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
+  
+  #arrows to show the direction of ASV abundance vectors
+  geom_text(data = PP_signif %>% 
+              dplyr::mutate(PP = str_to_sentence(gsub("_", " ", PP))), 
+            aes(x = NMDS1, y = NMDS2, label = PP), 
+            size = 3.5) +
+  
+  #theme and plot range
+  theme_classic(base_size = 12) + mytheme +
+  coord_fixed(1) +
+  # xlim(-2, 2) + ylim(-2, 2) +
+  
+  #stress value
+  annotate("text", 
+           x = .5, y = -.5, size = 8 * .352777778, 
+           label = paste0("Stress = ", 
+                          round(nmds_PP$nmds$stress, digits = 4)))
+
+show(p_PP)
+
+ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/NMDS_bray_PP_wide.png"), 
+       plot = p_PP, 
+       dpi = 300, width = 160, height = 160, units = "mm")
+```
+
+### exclude Unassigned taxa
+
+```{r}
+# primary lifestyle based
+df_nmds_FG_xUA <- data.frame(data.frame(sample_data(ps_ITS_FG_xUA)), nmds_FG_xUA$nmds$points)
+
+p_FG_xUA <- ggplot() +
+  geom_point(data = df_nmds_FG_xUA[df_nmds_FG_xUA$site == "Tsukuba", ], 
+             mapping = aes(x = MDS1, y = MDS2, color = PC1_clim)) +
+  scale_color_continuous(low = "#ffa50040", high = "#ffa500FF") +
+  labs(color = "Climatic PC1") +
+  new_scale_color() +
+  geom_point(data = df_nmds_FG_xUA[df_nmds_FG_xUA$site == "Kawatabi", ], 
+             mapping = aes(x = MDS1, y = MDS2, color = PC1_clim)) +
+  scale_color_continuous(low = "#19197040", high = "#191970FF") +
+  labs(color = "Climatic PC1") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
+  
+  #arrows to show the direction of ASV abundance vectors
+  geom_text(data = FG_signif_xUA %>% 
+              dplyr::mutate(primary_lifestyle = str_to_sentence(gsub("_", " ", primary_lifestyle))), 
+            aes(x = NMDS1, y = NMDS2, label = primary_lifestyle), 
+            size = 3.5) +
+  
+  #theme and plot range
+  theme_classic(base_size = 12) + mytheme +
+  coord_fixed(1) +
+  # xlim(-2, 2) + ylim(-2, 2) +
+  
+  #stress value
+  annotate("text", 
+           x = 1, y = -1, size = 8 * .352777778, 
+           label = paste0("Stress = ", 
+                          round(nmds_FG_xUA$nmds$stress, digits = 4)))
+
+show(p_FG_xUA)
+
+ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/NMDS_bray_FG_xUA_wide.png"), 
+       plot = p_FG_xUA, 
+       dpi = 300, width = 160, height = 160, units = "mm")
+```
+
+```{r}
+# PPC based
+df_nmds_PP_xUA <- data.frame(data.frame(sample_data(ps_ITS_PP_xUA)), nmds_PP_xUA$nmds$points)
+
+p_PP_xUA <- ggplot() +
+  geom_point(data = df_nmds_PP_xUA[df_nmds_PP_xUA$site == "Tsukuba", ], 
+             mapping = aes(x = MDS1, y = MDS2, color = PC1_clim)) +
+  scale_color_continuous(low = "#ffa50040", high = "#ffa500FF") +
+  labs(color = "Climatic PC1") +
+  new_scale_color() +
+  geom_point(data = df_nmds_PP_xUA[df_nmds_PP_xUA$site == "Kawatabi", ], 
+             mapping = aes(x = MDS1, y = MDS2, color = PC1_clim)) +
+  scale_color_continuous(low = "#19197040", high = "#191970FF") +
+  labs(color = "Climatic PC1") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
+  
+  #arrows to show the direction of ASV abundance vectors
+  geom_text(data = PP_signif_xUA %>% 
+              dplyr::mutate(PP = str_to_sentence(gsub("_", " ", PP))), 
+            aes(x = NMDS1, y = NMDS2, label = PP), 
+            size = 3.5) +
+  
+  #theme and plot range
+  theme_classic(base_size = 12) + mytheme +
+  coord_fixed(1) +
+  # xlim(-2, 2) + ylim(-2, 2) +
+  
+  #stress value
+  annotate("text", 
+           x = 1, y = -1, size = 8 * .352777778, 
+           label = paste0("Stress = ", 
+                          round(nmds_PP_xUA$nmds$stress, digits = 4)))
+
+show(p_PP_xUA)
+
+ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/figures/NMDS_bray_PP_xUA_wide.png"), 
+       plot = p_PP_xUA, 
+       dpi = 300, width = 160, height = 160, units = "mm")
+
+```
+
+</div></details>
+
+# Statistical analysis
+## PERMANOVA
+```{r}
+## primary lifestyle based
+set.seed(123)
+model_FG <- adonis2(dist_bray ~ site * population, 
+                       data = metadata, 
+                       permutations = 999, 
+                       by = "terms")
+
+## PPC based
+set.seed(123)
+model_PP <- adonis2(dist_bray_PP ~ site * population, 
+                       data = metadata, 
+                       permutations = 999, 
+                       by = "terms")
+
+# exclude Unassigned taxa
+## primary lifestyle based
+set.seed(123)
+model_FG_xUA <- adonis2(dist_bray_xUA ~ site * population, 
+                           data = data.frame(sample_data(ps_ITS_FG_xUA)), 
+                           permutataions = 999, 
+                           by = "terms")
+
+## PPC based
+set.seed(123)
+model_PP_xUA <- adonis2(dist_bray_PP_xUA ~ site * population, 
+                        data = data.frame(sample_data(ps_ITS_PP_xUA)), 
+                        permutataions = 999, 
+                        by = "terms")
+
+model_FG
+model_PP
+model_FG_xUA
+model_PP_xUA
+```
+
+**Functional composition significantly differed between the gardens.**
+<br>**Population effect was also significant with unassigned taxa excluded, whereas interaction was not significant.**
