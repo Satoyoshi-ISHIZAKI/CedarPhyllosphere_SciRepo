@@ -149,13 +149,169 @@ tax_table(ps_fapro_res_mod)[, "group"] <- gsub("other", "Unassigned",
 save(ps_fapro_res_mod, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/ps_fapro_res_mod.Rdata"))
 ```
 
+## overlap table
+
+```{r}
+# overlaps table
+FG_overlap <- read_tsv(paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/mod/group_overlaps_modc.tsv"))
+FG_overlap <- data.frame(FG_overlap) %>% 
+  column_to_rownames(var = "...1")
+
+# occurring groups only
+FG_overlap <- FG_overlap %>% 
+  dplyr::filter(rownames(FG_overlap) %in% data.frame(tax_table(subset_taxa(ps_fapro_res_mod, taxa_sums(ps_fapro_res_mod) > 0)))$group) %>% 
+  dplyr::select(sort(data.frame(tax_table(subset_taxa(ps_fapro_res_mod, taxa_sums(ps_fapro_res_mod) > 0)))$group[-43])) %>% 
+  rownames_to_column(var = "group") %>% 
+  dplyr::arrange(group) %>% 
+  column_to_rownames(var = "group")
+
+# overlap based on relative abundances
+FG_dist_ab_a <- ps_fapro_res_mod %>% 
+  subset_taxa(taxa_sums(ps_fapro_res_mod) > 0) %>% 
+  otu_table() %>% 
+  data.frame() %>% 
+  rownames_to_column(var = "feature") %>% # convert features to groups
+  left_join(tax_table(ps_fapro_res_mod) %>% 
+              data.frame() %>% 
+              rownames_to_column(var = "feature") %>% 
+              dplyr::select(feature, group), 
+            by = "feature") %>% 
+  column_to_rownames(var = "group") %>% # keep groups as rownames
+  dplyr::select(-feature) %>% 
+  vegdist(method = "bray")
+
+# overlap table based on relative abundances
+FG_overlap_ab_a <- data.frame(1 - as.matrix(FG_dist_ab_a))
+```
+
+</div></details>
+
+# Viz Overlaps
+<details><summary>**Check the overlaps between functional groups.**</summary><div>
+
+```{r}
+# occurrence based
+heat <- ggplot(data = FG_overlap %>%  
+                 rownames_to_column(var = "groups_r")%>% 
+                 pivot_longer(names_to = "groups_c", 
+                              values_to = "overlaps", 
+                              cols = -groups_r) %>% 
+                 mutate(groups_c = str_to_sentence(gsub("_", " ", groups_c)), 
+                        groups_r = str_to_sentence(gsub("_", " ", groups_r))
+                        ), 
+                 mapping = aes(x = groups_c, y = groups_r, fill = overlaps)) + 
+  geom_tile(color = "white") + 
+  xlab("Functional groups") + ylab("Functional groups") + labs(fill = "Overlap ratio") + 
+  theme_classic(base_size = 12) + mytheme + 
+  theme(axis.title = element_text(size = 9), 
+        axis.text = element_text(size = 5), 
+        axis.text.x = element_text(angle = 45, hjust = 1), 
+        legend.key.size = unit(3, "mm"), 
+        legend.title = element_text(size = 8), 
+        legend.text = element_text(size = 6))
+show(heat)
+
+ggsave(filename = paste0(path_out, 
+                         "/231202_Sugi_phyllosphere_June_16S/processed_data/mod/FG_overlap.png"), 
+       plot = heat, 
+       width = 160, height = 96, units = "mm", dpi = 300)
+```
+
+```{r}
+# relative abundance based
+# all taxa
+df_heat_a <- FG_overlap_ab_a %>%  
+  rownames_to_column(var = "groups_r")%>% 
+  pivot_longer(names_to = "groups_c", 
+               values_to = "overlaps", 
+               cols = -groups_r) %>% 
+  mutate(groups_c = str_to_sentence(gsub("_", " ", groups_c)), 
+         groups_r = str_to_sentence(gsub("_", " ", groups_r))
+         )
+heat_ab_a <- ggplot(data = df_heat_a, 
+                 mapping = aes(x = groups_c, y = groups_r, fill = overlaps)) + 
+  geom_tile(color = "white") + 
+  xlab("Functional groups") + ylab("Functional groups") + labs(fill = "Overlap ratio") + 
+  theme_classic(base_size = 12) + mytheme + 
+  theme(axis.title = element_text(size = 9), 
+        axis.text = element_text(size = 5), 
+        axis.text.x = element_text(angle = 45, hjust = 1), 
+        legend.key.size = unit(3, "mm"), 
+        legend.title = element_text(size = 8), 
+        legend.text = element_text(size = 6))
+show(heat_ab_a)
+
+ggsave(filename = paste0(path_out, 
+                         "/231202_Sugi_phyllosphere_June_16S/processed_data/mod/FG_overlap_RA.png"), 
+       plot = heat_ab_a, 
+       width = 160, height = 96, units = "mm", dpi = 300)
+```
+
+**Some functional groups (FGs) share most of assigned bacterial genera, resulting in almost the same abundance patterns.**
+<br>**Filter out the FGs with overlapping membership.**
+
+## Detect overlapping FGs
+
+```{r}
+# detect overlapping FGs based on relative abundance
+# use clustering approach
+clust_FG_a <- hclust(FG_dist_ab_a, method = "ward.D2")
+dend_FG_a <- as.dendrogram(clust_FG_a)
+
+# cut tree to define functional modules
+# treat FGs within .1 distance as the same module
+module_FG_a <- cutree(clust_FG_a, h = .1)
+module_FG_a <- module_FG_a[order.dendrogram(dend_FG_a)] # reorder based on dendrogram
+# module dataframe
+df_module_a <- data.frame(module_FG_a) %>% 
+  rownames_to_column(var = "group") %>% 
+  dplyr::arrange(module_FG_a)
+df_module_a
+
+# assign colors to modules
+module_color <- colorRampPalette(RColorBrewer::brewer.pal(8, "Set2"))(length(table(module_FG_a)))
+module_color <- module_color[module_FG_a]
+names(module_color) <- names(module_FG_a)
+
+# plot dendrogram
+dend_FG_a <- dend_FG_a %>% 
+  dendextend::set("labels_colors", module_color[names(module_FG_a)])
+plot(dend_FG_a)
+```
+
+```{r}
+# extract representative FGs from each module
+df_unique_FG_a <- df_module_a %>% 
+  dplyr::group_by(module_FG_a) %>% 
+  dplyr::slice_head(n = 1) %>% 
+  dplyr::ungroup()
+
+df_unique_FG_a
+```
+
+# subset representative FGs
+
+```{r}
+ps_fapro_nov <- subset_taxa(ps_fapro_res_mod, group %in% df_unique_FG_a$group)
+
+# save
+save(ps_fapro_nov, file = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/processed_data/ps_fapro_nov.Rdata"))
+```
+
 </div></details>
 
 # Barplot
 <details><summary>**Functional composition barplots**</summary><div>
 
 ```{r}
-plot_fapro <- plot_top_taxa(ps_fapro_res_mod, 
+ps_fapro_bar <- ps_fapro_nov
+tax_table(ps_fapro_bar) <- tax_table(ps_fapro_bar) %>% 
+  data.frame() %>% 
+  dplyr::mutate(group = str_to_sentence(gsub("_", " ", group))) %>% 
+  as.matrix() %>% 
+  tax_table()
+
+plot_fapro <- plot_top_taxa(ps_fapro_bar, 
                             taxonomic_level = "group", 
                             n_taxa = 12, 
                             transform = "none", 
@@ -188,11 +344,11 @@ ggsave(filename = paste0(path_out, "/231202_Sugi_phyllosphere_June_16S/figures/F
 ## NMDS
 
 ```{r}
-dist_bray <- vegdist(t(otu_table(ps_fapro_res_mod)), method = "bray")
+dist_bray <- vegdist(t(otu_table(ps_fapro_nov)), method = "bray")
 
 # exclude functionally Unassigned taxa for NMDS
-ps_fapro_res_mod_xUA <- subset_taxa(ps_fapro_res_mod, group != "Unassigned")
-dist_bray_xUA <- vegdist(t(otu_table(ps_fapro_res_mod_xUA)), method = "bray")
+ps_fapro_nov_xUA <- subset_taxa(ps_fapro_nov, group != "Unassigned")
+dist_bray_xUA <- vegdist(t(otu_table(ps_fapro_nov_xUA)), method = "bray")
 ```
 
 ```{r,eval=FALSE}
@@ -218,21 +374,21 @@ nmds_fapro_xUA$nmds$stress
 
 ```{r}
 set.seed(123)
-fit_FG <- envfit(nmds_fapro$nmds, t(otu_table(subset_taxa(ps_fapro_res_mod, taxa_sums(ps_fapro_res_mod) > 0))))
-fit_FG$tax_table <- tax_table(ps_fapro_res_mod)
+fit_FG <- envfit(nmds_fapro$nmds, t(otu_table(ps_fapro_nov)))
+fit_FG$tax_table <- tax_table(ps_fapro_nov)
 show(fit_FG)
-df_fit_FG <-data.frame(tax_table(ps_fapro_res_mod)[rownames(fit_FG$vectors$arrows), "group"], 
+df_fit_FG <-data.frame(tax_table(ps_fapro_nov)[rownames(fit_FG$vectors$arrows), "group"], 
                         fit_FG$vectors$arrows, 
                         r = fit_FG$vectors$r, 
                         p = fit_FG$vectors$pvals)
 
 # excluded Unassigned taxa
 set.seed(123)
-fit_FG_xUA <- envfit(nmds_fapro_xUA$nmds, t(otu_table(subset_taxa(ps_fapro_res_mod_xUA, 
-                                                                  taxa_sums(ps_fapro_res_mod_xUA) > 0))))
-fit_FG_xUA$tax_table <- tax_table(ps_fapro_res_mod_xUA)
+fit_FG_xUA <- envfit(nmds_fapro_xUA$nmds, t(otu_table(subset_taxa(ps_fapro_nov_xUA, 
+                                                                  taxa_sums(ps_fapro_nov_xUA) > 0))))
+fit_FG_xUA$tax_table <- tax_table(ps_fapro_nov_xUA)
 show(fit_FG_xUA)
-df_fit_FG_xUA <-data.frame(tax_table(ps_fapro_res_mod_xUA)[rownames(fit_FG_xUA$vectors$arrows), "group"], 
+df_fit_FG_xUA <-data.frame(tax_table(ps_fapro_nov_xUA)[rownames(fit_FG_xUA$vectors$arrows), "group"], 
                            fit_FG_xUA$vectors$arrows, 
                            r = fit_FG_xUA$vectors$r, 
                            p = fit_FG_xUA$vectors$pvals)
@@ -288,7 +444,8 @@ p_fapro <- ggplot() +
   geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
   
   #arrows to show the direction of ASV abundance vectors
-  geom_text(data = FG_signif,  
+  geom_text(data = FG_signif %>% 
+              dplyr::mutate(group = str_to_sentence(gsub("_", " ", group))), 
             aes(x = NMDS1, y = NMDS2, label = group), 
             size = 3.5) +
   
@@ -299,7 +456,7 @@ p_fapro <- ggplot() +
   
   #stress value
   annotate("text", 
-           x = 1, y = -.6, size = 8 * .352777778, 
+           x = 1, y = -.5, size = 8 * .352777778, 
            label = paste0("Stress = ", 
                           round(nmds_fapro$nmds$stress, digits = 4)))
 
@@ -327,7 +484,8 @@ p_fapro_xUA <- ggplot() +
   geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
   
   #arrows to show the direction of ASV abundance vectors
-  geom_text(data = FG_signif_xUA,  
+  geom_text(data = FG_signif_xUA %>% 
+              dplyr::mutate(group = str_to_sentence(gsub("_", " ", group))), 
             aes(x = NMDS1, y = NMDS2, label = group), 
             size = 3.5) +
   
