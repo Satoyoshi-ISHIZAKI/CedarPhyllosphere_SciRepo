@@ -1,0 +1,732 @@
+---
+title: "DAanalysis_FungalTraits"
+output: html_document
+date: "2026-01-09"
+---
+
+# Workflow to this script:
+1. Pre-processing_ITS.Rmd
+2. rarefaction_ITS.Rmd
+3. NMDS_ITS.Rmd
+4. envfit_ASV_ITS.Rmd
+5. BVOC_preprocessing.Rmd
+6. envfit_BVOC_LODrev.Rmd
+7. FungalTraits_all.Rmd
+8. DAanalysis_FungalTraits.Rmd (this file)
+
+# load packages
+
+```{r,include=FALSE}
+library(readxl)
+library(phyloseq)
+library(tidyverse)
+library(vegan)
+library(Maaslin2)
+library(SummarizedExperiment)
+library(ggnewscale)
+library(viridis)
+library(viridisLite)
+```
+
+# path to raw-data directory (change "path" to your raw-data directory)
+
+```{r}
+# create "path" file, and define "path" as your raw-data directory(character vector) in the file
+# "path" is raw-data directory, and "path_out" is output file directory
+
+source("../scripts/path.R")
+```
+
+# source codes
+
+```{r}
+source("../R/occurrence.R")
+source("../R/plot_top_taxa.R")
+```
+
+# plot theme
+
+```{r}
+mytheme <-theme(text = element_text(color = "black"), 
+                axis.text = element_text(color = "black")
+                )
+```
+
+# data import
+<details><summary>**data import**</summary><div>
+
+## ps_object
+
+```{r}
+load(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/ps_ITS_FG.Rdata"))
+load(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/ps_ITS_PP.Rdata"))
+# merge all pathogens to "plant_pathogen"
+ps_ITS_PPm <- merge_taxa(ps_ITS_PP, taxa_names(ps_ITS_PP)[grep("pathogen", tax_table(ps_ITS_PP)[, "PP"])])
+tax_table(ps_ITS_PPm)[is.na(tax_table(ps_ITS_PPm)[, "PP"]), "PP"] <- "plant_pathogen"
+
+tax_FG <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/ASVs_FungalTraits.tsv"))
+```
+
+## BVOC
+
+```{r}
+#read VOC data
+load(file = paste0(path_out, "/data/Sugi/BVOC/exp_Terpene_2209to2408_LODrev_nolod.Rdata"))
+load(file = paste0(path_out, "/data/Sugi/BVOC/exp_Terpene_2209to2408_LODrev_log.Rdata"))
+
+#extract the data for June 2023
+BVOC_2306 <- exp_Ohta_nolod %>% subset(Month == "2306")
+BVOC_2306_log <- exp_Ohta_log %>% subset(Month == "2306")
+
+#Longifolene is not detected in the June 2023 samples, so remove it
+BVOC_2306 <- BVOC_2306[, -which(colnames(BVOC_2306) == "Longifolene")]
+BVOC_2306 <- BVOC_2306_log[, -which(colnames(BVOC_2306_log) == "Longifolene")]
+
+#remove beta-Caryophyllene from the dataframe
+bCary <- which("beta-Caryophyllene" == colnames(BVOC_2306_log)) #the column number of beta-Caryophyllene
+BVOC_2306_log_rm <- assay(BVOC_2306_log)[, -bCary] #remove beta-Caryophyllene
+```
+
+```{r}
+#calculate log-transformed total BVOC- and MTs emission
+BVOC_2306_total_log <- data.frame(total = log(rowSums(assay(BVOC_2306)), base = 10)) %>%
+  rownames_to_column(var = "sampleID")
+MT_2306_log <- data.frame(MTs = log(rowSums(assay(BVOC_2306[, BVOC_2306$mol_weight == "Mono"])) + 1, base = 10)) %>%
+  rownames_to_column(var = "sampleID")
+SQT_2306_log <- data.frame(SQT = log(rowSums(assay(BVOC_2306[, BVOC_2306$mol_weight == "Sesqui"])) + 1, base = 10)) %>%
+  rownames_to_column(var = "sampleID")
+DT_2306_log <- data.frame(DT = log(rowSums(assay(BVOC_2306[, BVOC_2306$mol_weight == "Di"])) + 1, base = 10)) %>%
+  rownames_to_column(var = "sampleID")
+
+#merge BVOC data
+all_2306_log <- BVOC_2306_log_rm %>%
+  rownames_to_column(var = "sampleID") %>%
+  full_join(BVOC_2306_total_log, by = "sampleID") %>%
+  full_join(MT_2306_log, by = "sampleID") %>%
+  full_join(SQT_2306_log, by = "sampleID") %>%
+  full_join(DT_2306_log, by = "sampleID")
+
+# PCA results
+load(paste0(path_out, "/data/Sugi/BVOC/pca_BVOC_2306_log_LODrev.Rdata"))
+BVOC_pca <- data.frame(pca_BVOC_log_rm_LODrev$x)
+colnames(BVOC_pca) <- paste(colnames(BVOC_pca), "ter", sep = "_")
+BVOC_pca <- BVOC_pca %>% 
+  rownames_to_column(var = "sampleID")
+
+# merge PC1:3 to all_2306_log
+all_2306_log <- all_2306_log %>% 
+  left_join(BVOC_pca %>% dplyr::select(sampleID, PC1_ter, PC2_ter, PC3_ter), by = "sampleID") %>% 
+  dplyr::filter(!is.na(PC1_ter)) %>% # remove samples with NA PC1_ter values (microbe data not available)
+  dplyr::mutate(sampleID = paste(sapply(lapply(str_split(sampleID, "_"), `[`, 1:3), paste0, collapse = "_"), 
+                                 substr(replace_na(sapply(str_split(sampleID, "_"), `[`, 4), "01"), 2, 2), 
+                                 sep = "_")
+                )
+
+```
+
+```{r}
+#merge metadata
+metadata <- data.frame(sample_data(ps_ITS_FG))
+metadata <- metadata %>% 
+  dplyr::mutate(sampleID = paste(paste0(substr(site, 1, 1), "2306"), 
+                                 samplename, sep = "_")
+                )
+
+metadata <- metadata %>% 
+  left_join(all_2306_log, by = "sampleID")
+rownames(metadata) <- formatC(as.numeric(rownames(metadata)), width = 4, flag = "0")
+
+# add to phyloseq
+sample_data(ps_ITS_FG) <- sample_data(metadata)
+sample_data(ps_ITS_PP) <- sample_data(metadata)
+sample_data(ps_ITS_PPm) <- sample_data(metadata)
+```
+
+</div></details>
+
+# MaAsLin2
+<details><summary>**DA analysis with MaAsLin2**</summary><div>
+
+## Whole
+### FG
+
+```{r,message=FALSE}
+DA_res <- Maaslin2(input_data = as.data.frame(t(otu_table(ps_ITS_FG)))[, -grep("Unassigned", 
+                                                                               tax_table(ps_ITS_FG)[, "primary_lifestyle"]
+                                                                               )
+                                                                       ], 
+                   input_metadata = data.frame(sample_data(ps_ITS_FG)) %>% 
+                     dplyr::select(site, PC1_clim), 
+                   output = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/Whole/FG"), 
+                   fixed_effects = c("site", "PC1_clim"), 
+                   random_effects = NULL, 
+                   analysis_method = "LM", 
+                   transform = "LOG", 
+                   normalization = "NONE", 
+                   min_abundance = 0.0, 
+                   min_prevalence = 0.1, 
+                   max_significance = 0.05, 
+                   reference = c("site,Tsukuba"), 
+                   plot_heatmap = TRUE, 
+                   plot_scatter = FALSE)
+```
+
+```{r}
+signif <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/Whole/FG/significant_results.tsv"))
+fitdata_tf <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/Whole/FG/features/filtered_data_norm_transformed.tsv"))
+fitdata_tf <- data.frame(fitdata_tf) %>% 
+  column_to_rownames(var = "feature")
+
+signif <-signif %>% 
+  left_join(data.frame(tax_table(ps_ITS_FG)) %>% 
+              rownames_to_column(var = "feature") %>% 
+              dplyr::select(feature, primary_lifestyle), 
+            by = "feature")
+
+signif
+```
+
+**The RAs of some saprotrophs are positively associated with the Kawatabi common garden.**
+<br>**The RA of lichen parasite was negatively assoicated with the Kawtabi common garden.**
+
+### PP
+
+```{r,message=FALSE}
+DA_res_PP <- Maaslin2(input_data = as.data.frame(t(otu_table(ps_ITS_PP)))[, -grep("Unassigned", 
+                                                                                   tax_table(ps_ITS_PP)[, "PP"]
+                                                                                   )
+                                                                          ], 
+                      input_metadata = data.frame(sample_data(ps_ITS_PP)) %>% 
+                        dplyr::select(site, PC1_clim), 
+                      output = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/Whole/PP"), 
+                      fixed_effects = c("site", "PC1_clim"), 
+                      random_effects = NULL, 
+                      analysis_method = "LM", 
+                      transform = "LOG", 
+                      normalization = "NONE", 
+                      min_abundance = 0.0, 
+                      min_prevalence = 0.1, 
+                      max_significance = 0.05, 
+                      reference = c("site,Tsukuba"), 
+                      plot_heatmap = TRUE, 
+                      plot_scatter = FALSE)
+```
+
+```{r}
+signif_PP <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/Whole/PP/significant_results.tsv"))
+
+signif_PP <-signif_PP %>% 
+  left_join(data.frame(tax_table(ps_ITS_PP)) %>% 
+              rownames_to_column(var = "feature") %>% 
+              dplyr::select(feature, PP), 
+            by = "feature")
+
+signif_PP
+```
+
+### merge all pathogens
+
+```{r,message=FALSE}
+DA_res_PPm <- Maaslin2(input_data = as.data.frame(t(otu_table(ps_ITS_PPm)))[, -grep("Unassigned", 
+                                                                                    tax_table(ps_ITS_PPm)[, "PP"]
+                                                                                    )
+                                                                          ], 
+                      input_metadata = data.frame(sample_data(ps_ITS_PPm)) %>% 
+                        dplyr::select(site, PC1_clim), 
+                      output = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/Whole/PPm"), 
+                      fixed_effects = c("site", "PC1_clim"), 
+                      random_effects = NULL, 
+                      analysis_method = "LM", 
+                      transform = "LOG", 
+                      normalization = "NONE", 
+                      min_abundance = 0.0, 
+                      min_prevalence = 0.1, 
+                      max_significance = 0.05, 
+                      reference = c("site,Tsukuba"), 
+                      plot_heatmap = TRUE, 
+                      plot_scatter = FALSE)
+```
+
+```{r}
+signif_PPm <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/Whole/PPm/significant_results.tsv"))
+
+signif_PPm <-signif_PPm %>% 
+  left_join(data.frame(tax_table(ps_ITS_PPm)) %>% 
+              rownames_to_column(var = "feature") %>% 
+              dplyr::select(feature, PP), 
+            by = "feature")
+
+signif_PPm
+```
+
+## Kawatabi
+### FG
+
+```{r,message=FALSE}
+ps_FG_k <- subset_samples(ps_ITS_FG, site == "Kawatabi")
+
+DA_res_k <- Maaslin2(input_data = as.data.frame(t(otu_table(ps_FG_k)))[, -grep("Unassigned", 
+                                                                               tax_table(ps_FG_k)[, "primary_lifestyle"]
+                                                                               )
+                                                                       ], 
+                     input_metadata = data.frame(sample_data(ps_FG_k)) %>% 
+                       dplyr::select(PC1_clim), 
+                     output = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/Kawatabi/FG"), 
+                     fixed_effects = c("PC1_clim"), 
+                     random_effects = NULL, 
+                     analysis_method = "LM", 
+                     transform = "LOG", 
+                     normalization = "NONE", 
+                     min_abundance = 0.0, 
+                     min_prevalence = 0.2, 
+                     max_significance = 0.1, 
+                     plot_heatmap = TRUE, 
+                     plot_scatter = FALSE)
+```
+
+```{r}
+signif_k <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/Kawatabi/FG/significant_results.tsv"))
+fitdata_tf_k <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/Kawatabi/FG/features/filtered_data_norm_transformed.tsv"))
+fitdata_tf_k <- data.frame(fitdata_tf_k) %>% 
+  column_to_rownames(var = "feature")
+
+signif_k <- signif_k %>% 
+  left_join(data.frame(tax_table(ps_FG_k)) %>% 
+              rownames_to_column(var = "feature") %>% 
+              dplyr::select(feature, primary_lifestyle), 
+            by = "feature")
+
+all_k <- DA_res_k$results %>% 
+  left_join(data.frame(tax_table(ps_FG_k)) %>% 
+              rownames_to_column(var = "feature") %>% 
+              dplyr::select(feature, primary_lifestyle), 
+            by = "feature") %>% 
+  dplyr::select(-name)
+
+signif_k
+all_k
+```
+
+**The RA of lichenized fungi were positively associated with climatic PC1 in Kawatabi.**
+<br>**The RA of litter saprotroph was marginally negatively associated with climatic PC1, with the P value below 0.05.**
+
+```{r}
+plot(sample_data(ps_FG_k)$PC1_clim, 
+     fitdata_tf_k$ASV1528, 
+     xlab = "Climatic PC1", 
+     ylab = bquote({Log[2]} ~ "relative abundance of litter saprotroph")
+     )
+```
+
+### PP
+
+```{r,message=FALSE}
+ps_PP_k <- subset_samples(ps_ITS_PP, site == "Kawatabi")
+
+DA_res_PP_k <- Maaslin2(input_data = as.data.frame(t(otu_table(ps_PP_k)))[, -grep("Unassigned", 
+                                                                               tax_table(ps_PP_k)[, "PP"]
+                                                                               )
+                                                                       ], 
+                     input_metadata = data.frame(sample_data(ps_PP_k)) %>% 
+                       dplyr::select(PC1_clim), 
+                     output = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/Kawatabi/PP"), 
+                     fixed_effects = c("PC1_clim"), 
+                     random_effects = NULL, 
+                     analysis_method = "LM", 
+                     transform = "LOG", 
+                     normalization = "NONE", 
+                     min_abundance = 0.0, 
+                     min_prevalence = 0.1, 
+                     max_significance = 0.05, 
+                     plot_heatmap = TRUE, 
+                     plot_scatter = FALSE)
+```
+
+```{r}
+signif_PP_k <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/Kawatabi/PP/significant_results.tsv"))
+fitdata_tf_PP_k <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/Kawatabi/PP/features/filtered_data_norm_transformed.tsv"))
+fitdata_tf_PP_k <- data.frame(fitdata_tf_PP_k) %>% 
+  column_to_rownames(var = "feature")
+
+signif_PP_k <- signif_PP_k %>% 
+  left_join(data.frame(tax_table(ps_PP_k)) %>% 
+              rownames_to_column(var = "feature") %>% 
+              dplyr::select(feature, PP), 
+            by = "feature")
+
+signif_PP_k
+```
+
+### PPm
+
+```{r,message=FALSE}
+ps_PPm_k <- subset_samples(ps_ITS_PPm, site == "Kawatabi")
+
+DA_res_PPm_k <- Maaslin2(input_data = as.data.frame(t(otu_table(ps_PPm_k)))[, -grep("Unassigned", 
+                                                                                    tax_table(ps_PPm_k)[, "PP"]
+                                                                                    )
+                                                                            ], 
+                         input_metadata = data.frame(sample_data(ps_PPm_k)) %>% 
+                           dplyr::select(PC1_clim), 
+                         output = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/Kawatabi/PPm"), 
+                         fixed_effects = c("PC1_clim"), 
+                         random_effects = NULL, 
+                         analysis_method = "LM", 
+                         transform = "LOG", 
+                         normalization = "NONE", 
+                         min_abundance = 0.0, 
+                         min_prevalence = 0.1, 
+                         max_significance = 0.05, 
+                         plot_heatmap = TRUE, 
+                         plot_scatter = FALSE)
+```
+
+```{r}
+signif_PPm_k <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/Kawatabi/PPm/significant_results.tsv"))
+fitdata_tf_PPm_k <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/Kawatabi/PPm/features/filtered_data_norm_transformed.tsv"))
+fitdata_tf_PPm_k <- data.frame(fitdata_tf_PPm_k) %>% 
+  column_to_rownames(var = "feature")
+
+signif_PPm_k <- signif_PPm_k %>% 
+  left_join(data.frame(tax_table(ps_PPm_k)) %>% 
+              rownames_to_column(var = "feature") %>% 
+              dplyr::select(feature, PP), 
+            by = "feature")
+
+signif_PPm_k
+```
+
+## BVOCs
+### FG
+
+```{r,message=FALSE}
+ps_FG_VOC <- subset_samples(ps_FG_k, !is.na(PC1_ter))
+
+DA_res_VOC <- Maaslin2(input_data = as.data.frame(t(otu_table(ps_FG_VOC)))[, -grep("Unassigned", 
+                                                                                   tax_table(ps_FG_VOC)[, "primary_lifestyle"]
+                                                                                   )
+                                                                           ], 
+                       input_metadata = data.frame(sample_data(ps_FG_VOC)) %>% 
+                         dplyr::select(PC1_ter), 
+                       output = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/BVOC/FG"), 
+                     fixed_effects = c("PC1_ter"), 
+                     random_effects = NULL, 
+                     analysis_method = "LM", 
+                     transform = "LOG", 
+                     normalization = "NONE", 
+                     min_abundance = 0.0, 
+                     min_prevalence = 0.1, 
+                     max_significance = 0.1, # lower threshold to acount for small sample size
+                     plot_heatmap = TRUE, 
+                     plot_scatter = FALSE)
+```
+
+```{r}
+signif_v <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/BVOC/FG/significant_results.tsv"))
+all_v <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/BVOC/FG/all_results.tsv"))
+fitdata_tf_v <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/BVOC/FG/features/filtered_data_norm_transformed.tsv"))
+fitdata_tf_v <- data.frame(fitdata_tf_v) %>% 
+  column_to_rownames(var = "feature")
+
+signif_v <- signif_v %>% 
+  left_join(data.frame(tax_table(ps_FG_VOC)) %>% 
+              rownames_to_column(var = "feature") %>% 
+              dplyr::select(feature, primary_lifestyle), 
+            by = "feature")
+all_v <- all_v %>% 
+  left_join(data.frame(tax_table(ps_FG_VOC)) %>% 
+              rownames_to_column(var = "feature") %>% 
+              dplyr::select(feature, primary_lifestyle), 
+            by = "feature")
+
+signif_v
+all_v
+```
+
+**No functions were significantly associated with terpene PCs.**
+
+### PP
+
+```{r,message=FALSE}
+ps_PP_VOC <- subset_samples(ps_PP_k, !is.na(PC1_ter))
+
+DA_res_PP_VOC <- Maaslin2(input_data = as.data.frame(t(otu_table(ps_PP_VOC)))[, -grep("Unassigned", 
+                                                                                   tax_table(ps_PP_VOC)[, "PP"]
+                                                                                   )
+                                                                           ], 
+                          input_metadata = data.frame(sample_data(ps_PP_VOC)) %>% 
+                            dplyr::select(PC1_ter), 
+                          output = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/BVOC/PP"), 
+                          fixed_effects = c("PC1_ter"), 
+                          random_effects = NULL, 
+                          analysis_method = "LM", 
+                          transform = "LOG", 
+                          normalization = "NONE", 
+                          min_abundance = 0.0, 
+                          min_prevalence = 0.1, 
+                          max_significance = 0.1, # lower threshold to acount for small sample size
+                          plot_heatmap = TRUE, 
+                          plot_scatter = FALSE)
+```
+
+```{r}
+signif_PP_v <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/BVOC/PP/significant_results.tsv"))
+all_PP_v <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/BVOC/PP/all_results.tsv"))
+fitdata_tf_PP_v <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/BVOC/PP/features/filtered_data_norm_transformed.tsv"))
+fitdata_tf_PP_v <- data.frame(fitdata_tf_PP_v) %>% 
+  column_to_rownames(var = "feature")
+
+signif_PP_v <- signif_PP_v %>% 
+  left_join(data.frame(tax_table(ps_PP_VOC)) %>% 
+              rownames_to_column(var = "feature") %>% 
+              dplyr::select(feature, PP), 
+            by = "feature")
+all_PP_v <- all_PP_v %>% 
+  left_join(data.frame(tax_table(ps_PP_VOC)) %>% 
+              rownames_to_column(var = "feature") %>% 
+              dplyr::select(feature, PP), 
+            by = "feature")
+
+signif_PP_v
+all_PP_v
+```
+
+### PPm
+
+```{r,message=FALSE}
+ps_PPm_VOC <- subset_samples(ps_PPm_k, !is.na(PC1_ter))
+
+DA_res_PPm_VOC <- Maaslin2(input_data = as.data.frame(t(otu_table(ps_PPm_VOC)))[, -grep("Unassigned", 
+                                                                                        tax_table(ps_PPm_VOC)[, "PP"]
+                                                                                        )
+                                                                                ], 
+                           input_metadata = data.frame(sample_data(ps_PPm_VOC)) %>% 
+                            dplyr::select(PC1_ter), 
+                           output = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/BVOC/PPm"), 
+                           fixed_effects = c("PC1_ter"), 
+                           random_effects = NULL, 
+                           analysis_method = "LM", 
+                           transform = "LOG", 
+                           normalization = "NONE", 
+                           min_abundance = 0.0, 
+                           min_prevalence = 0.1, 
+                           max_significance = 0.1, # lower threshold to acount for small sample size
+                           plot_heatmap = TRUE, 
+                           plot_scatter = FALSE)
+```
+
+```{r}
+signif_PPm_v <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/BVOC/PPm/significant_results.tsv"))
+all_PPm_v <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/BVOC/PPm/all_results.tsv"))
+fitdata_tf_PPm_v <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/BVOC/PPm/features/filtered_data_norm_transformed.tsv"))
+fitdata_tf_PPm_v <- data.frame(fitdata_tf_PPm_v) %>% 
+  column_to_rownames(var = "feature")
+
+signif_PPm_v <- signif_PPm_v %>% 
+  left_join(data.frame(tax_table(ps_PPm_VOC)) %>% 
+              rownames_to_column(var = "feature") %>% 
+              dplyr::select(feature, PP), 
+            by = "feature")
+all_PPm_v <- all_PPm_v %>% 
+  left_join(data.frame(tax_table(ps_PPm_VOC)) %>% 
+              rownames_to_column(var = "feature") %>% 
+              dplyr::select(feature, PP), 
+            by = "feature")
+
+signif_PPm_v
+all_PPm_v
+```
+
+## Tsukuba
+### FG
+
+```{r,message=FALSE}
+ps_FG_t <- subset_samples(ps_ITS_FG, site == "Tsukuba")
+
+DA_res_t <- Maaslin2(input_data = as.data.frame(t(otu_table(ps_FG_t)))[, -grep("Unassigned", 
+                                                                               tax_table(ps_FG_t)[, "primary_lifestyle"]
+                                                                               )
+                                                                       ], 
+                     input_metadata = data.frame(sample_data(ps_FG_t)) %>% 
+                       dplyr::select(PC1_clim), 
+                     output = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/Tsukuba/FG"), 
+                     fixed_effects = c("PC1_clim"), 
+                     random_effects = NULL, 
+                     analysis_method = "LM", 
+                     transform = "LOG", 
+                     normalization = "NONE", 
+                     min_abundance = 0.0, 
+                     min_prevalence = 0.1, 
+                     max_significance = 0.05, 
+                     plot_heatmap = TRUE, 
+                     plot_scatter = FALSE)
+```
+
+```{r}
+signif_t <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/Tsukuba/FG/significant_results.tsv"))
+all_t <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/Tsukuba/FG/all_results.tsv"))
+fitdata_tf_t <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/Tsukuba/FG/features/filtered_data_norm_transformed.tsv"))
+fitdata_tf_t <- data.frame(fitdata_tf_t) %>% 
+  column_to_rownames(var = "feature")
+
+signif_t <- signif_t %>% 
+  left_join(data.frame(tax_table(ps_FG_t)) %>% 
+              rownames_to_column(var = "feature") %>% 
+              dplyr::select(feature, primary_lifestyle), 
+            by = "feature")
+all_t <- all_t %>% 
+  left_join(data.frame(tax_table(ps_FG_t)) %>% 
+              rownames_to_column(var = "feature") %>% 
+              dplyr::select(feature, primary_lifestyle), 
+            by = "feature")
+
+signif_t
+all_t
+```
+
+**No functions were significantly associated with the climatic PC1 in Tsukuba.**
+
+### PP
+
+```{r,message=FALSE}
+ps_PP_t <- subset_samples(ps_ITS_PP, site == "Tsukuba")
+
+DA_res_PP_t <- Maaslin2(input_data = as.data.frame(t(otu_table(ps_PP_t)))[, -grep("Unassigned", 
+                                                                                  tax_table(ps_PP_t)[, "PP"]
+                                                                                  )
+                                                                          ], 
+                        input_metadata = data.frame(sample_data(ps_PP_t)) %>% 
+                          dplyr::select(PC1_clim), 
+                        output = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/Tsukuba/PP"), 
+                        fixed_effects = c("PC1_clim"), 
+                        random_effects = NULL, 
+                        analysis_method = "LM", 
+                        transform = "LOG", 
+                        normalization = "NONE", 
+                        min_abundance = 0.0, 
+                        min_prevalence = 0.1, 
+                        max_significance = 0.05, 
+                        plot_heatmap = TRUE, 
+                        plot_scatter = FALSE)
+```
+
+```{r}
+signif_PP_t <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/Tsukuba/PP/significant_results.tsv"))
+all_PP_t <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/Tsukuba/PP/all_results.tsv"))
+
+signif_PP_t <- signif_PP_t %>% 
+  left_join(data.frame(tax_table(ps_PP_t)) %>% 
+              rownames_to_column(var = "feature") %>% 
+              dplyr::select(feature, PP), 
+            by = "feature")
+all_PP_t <- all_PP_t %>% 
+  left_join(data.frame(tax_table(ps_PP_t)) %>% 
+              rownames_to_column(var = "feature") %>% 
+              dplyr::select(feature, PP), 
+            by = "feature")
+
+signif_PP_t
+all_PP_t
+```
+
+### PPm
+
+```{r,message=FALSE}
+ps_PPm_t <- subset_samples(ps_ITS_PPm, site == "Tsukuba")
+
+DA_res_PPm_t <- Maaslin2(input_data = as.data.frame(t(otu_table(ps_PPm_t)))[, -grep("Unassigned", 
+                                                                                  tax_table(ps_PPm_t)[, "PP"]
+                                                                                  )
+                                                                          ], 
+                        input_metadata = data.frame(sample_data(ps_PPm_t)) %>% 
+                          dplyr::select(PC1_clim), 
+                        output = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/Tsukuba/PPm"), 
+                        fixed_effects = c("PC1_clim"), 
+                        random_effects = NULL, 
+                        analysis_method = "LM", 
+                        transform = "LOG", 
+                        normalization = "NONE", 
+                        min_abundance = 0.0, 
+                        min_prevalence = 0.1, 
+                        max_significance = 0.05, 
+                        plot_heatmap = TRUE, 
+                        plot_scatter = FALSE)
+```
+
+```{r}
+signif_PPm_t <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/Tsukuba/PPm/significant_results.tsv"))
+all_PPm_t <- read_tsv(file = paste0(path_out, "/231202_Sugi_phyllosphere_June_ITS/processed_data/DA/Maaslin2/Tsukuba/PPm/all_results.tsv"))
+
+signif_PPm_t <- signif_PPm_t %>% 
+  left_join(data.frame(tax_table(ps_PPm_t)) %>% 
+              rownames_to_column(var = "feature") %>% 
+              dplyr::select(feature, PP), 
+            by = "feature")
+all_PPm_t <- all_PPm_t %>% 
+  left_join(data.frame(tax_table(ps_PPm_t)) %>% 
+              rownames_to_column(var = "feature") %>% 
+              dplyr::select(feature, PP), 
+            by = "feature")
+
+signif_PPm_t
+all_PPm_t
+```
+
+</div></details>
+
+# Results
+
+```{r}
+signif
+signif_PP
+signif_PPm
+all_k
+all_v
+all_t
+```
+
+**Overall, saprotrophs and wood associated fungi were significantly more abundant in Kawatabi. Lichen parasite was significantly more abundant in Tsukuba, negatively correlating with climatic PC1.**
+
+## scatter plot
+###Kawatabi
+
+```{r,eval=FALSE}
+pldata_tf_k <- fitdata_tf_k %>% 
+  dplyr::select(signif_k$feature) %>% 
+  rownames_to_column(var = "rownames") %>% 
+  left_join(data.frame(sample_data(ps_fapro_k)) %>% 
+              rownames_to_column(var = "rownames") %>% 
+              dplyr::select(rownames, PC1_clim), 
+            by = "rownames") %>% 
+  pivot_longer(names_to = "feature", values_to = "log2RA", cols = -c(rownames, PC1_clim))
+```
+
+
+```{r,eval=FALSE}
+features_sig <- signif_k$feature
+plots <- list()
+
+for (i in 1:length(features_sig)) {
+  p <- ggplot(data = pldata_tf_k %>% dplyr::filter(feature == features_sig[i]), 
+              mapping = aes(x = PC1_clim, y = log2RA)) + 
+    geom_point() + 
+    stat_smooth(method = "glm", 
+                linewidth = 0.5, 
+                color = 'blue', 
+                na.rm = TRUE) + 
+    xlab("Climatic PC1") + 
+    ylab(bquote({Log[2]} ~ "relative abundance of" ~ .(gsub("_", " ", signif_k[signif_k$feature == features_sig[i], ]$group)))) + 
+    theme_classic(base_size = 12) + mytheme
+  
+  plots[[i]] <- p
+  ggsave(filename = paste0(path_out, 
+                           "/231202_Sugi_phyllosphere_June_16S/processed_data/DA/Maaslin2/Kawatabi/figures/", 
+                           signif_k[signif_k$feature == features_sig[i], ]$group, ".png"), 
+         plot = p, 
+         width = 160, height = 120, units = "mm", dpi = 300)
+}
+
+names(plots) <- signif_k$group
+plots[["aerobic_chemoheterotrophy"]]
+```
+
